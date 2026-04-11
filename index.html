@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion AI – Voice Emotion Detection</title>
+  <meta name="description" content="Analyze emotions from voice using advanced deep learning with 97%+ accuracy. Real-time AI-powered emotion detection system." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- OGL WebGL Library -->
+  <script type="importmap">
+    {
+      "imports": {
+        "ogl": "https://cdn.jsdelivr.net/npm/ogl@1.0.10/src/index.js"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <!-- ===== VOICE POWERED ORB ===== -->
+  <div id="voice-orb-container"></div>
+
+  <!-- ===== INTERACTIVE BACKGROUND ===== -->
+  <div class="interactive-bg"></div>
+
+  
+  <!-- ===== SINGLE FRAME APP ===== -->
+  <div class="app-frame">
+
+    <!-- TOP BADGE -->
+    <div class="top-badge">
+      <span class="badge-dot"></span>
+      AI-Powered · Deep Learning · 97%+ Accuracy
+    </div>
+
+    <!-- BRAND NAME -->
+    <h1 class="brand-title">Emotion <span class="accent-glow">AI</span></h1>
+    <p class="brand-subtitle">Analyze emotions from voice using advanced deep learning.<br/>Real-time inference with industry-leading accuracy.</p>
+
+    <!-- LANDING ACTIONS -->
+    <div class="landing-actions" id="landing-actions">
+      <button class="btn btn-analyze" id="btn-analyze-stream" style="width:auto; animation:none; margin:0;">
+        <span class="analyze-icon">🎙️</span>
+        <span>Analyze the Stream</span>
+        <span class="analyze-arrow">→</span>
+      </button>
+            <button class="btn btn-secondary" id="btn-history" style="padding:0.9rem 2rem; border-radius:50px;">
+        <span class="icon">📊</span> Analysis History
+      </button>
+    </div>
+
+    <!-- PANELS CONTAINER (side-by-side when both visible) -->
+    <div class="panels-container" id="panels-container">
+
+    <!-- MAIN PANEL -->
+    <div class="main-panel glass-card hidden" id="main-panel">
+
+      <!-- INPUT TABS -->
+      <div class="tab-row">
+        <button class="tab-btn active" id="tab-record" onclick="switchTab('record')">
+          <span>🎤</span> Record Voice
+        </button>
+        <button class="tab-btn" id="tab-upload" onclick="switchTab('upload')">
+          <span>📁</span> Upload File
+        </button>
+      </div>
+
+      <!-- RECORD PANEL -->
+      <div class="tab-panel" id="panel-record">
+        <div class="waveform-box" id="waveform-box">
+          <canvas id="waveformCanvas" width="600" height="70"></canvas>
+          <div class="wf-idle" id="wf-idle">
+            <div class="idle-bars">
+              <div class="idle-bar" style="--h:18px;--d:0s"></div>
+              <div class="idle-bar" style="--h:30px;--d:.1s"></div>
+              <div class="idle-bar" style="--h:46px;--d:.2s"></div>
+              <div class="idle-bar" style="--h:58px;--d:.3s"></div>
+              <div class="idle-bar" style="--h:46px;--d:.4s"></div>
+              <div class="idle-bar" style="--h:30px;--d:.5s"></div>
+              <div class="idle-bar" style="--h:18px;--d:.6s"></div>
+            </div>
+            <span class="idle-hint">Awaiting microphone input…</span>
+          </div>
+        </div>
+        <div class="record-row">
+          <div class="record-timer" id="record-timer">00:00</div>
+        </div>
+        
+        <!-- Circular Mic Button in Waveform Center -->
+        <div class="mic-button-container" id="mic-button-container">
+          <button class="mic-circular-btn" id="start-record-btn">
+            <!-- Mic Icon for Start State -->
+            <svg class="mic-icon mic-start" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 14.5C13.3807 14.5 14.5 13.3807 14.5 12V7C14.5 5.61929 13.3807 4.5 12 4.5C10.6193 4.5 9.5 5.61929 9.5 7V12C9.5 13.3807 10.6193 14.5 12 14.5Z" fill="white" stroke="white" stroke-width="0.5"/>
+              <path d="M18 11C18 14.3137 15.3137 17 12 17C8.68629 17 6 14.3137 6 11" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M12 17V20" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M8.5 20H15.5" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <!-- Stop Icon for Recording State (Hidden by default) -->
+            <svg class="mic-icon mic-stop hidden" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="8" y="8" width="8" height="8" rx="1" fill="white"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- UPLOAD PANEL -->
+      <div class="tab-panel hidden" id="panel-upload">
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="audio-file-input" accept=".wav,.mp3,.ogg,.flac,.m4a" hidden />
+          <div class="upload-inner" id="upload-inner">
+            <div class="upload-icon">⬆</div>
+            <p class="upload-hint">Drag & Drop audio file here</p>
+            <p class="upload-sub">or</p>
+            <button class="btn btn-outline" id="browse-btn">Browse File</button>
+            <p class="upload-formats">WAV · MP3 · OGG · FLAC · M4A</p>
+          </div>
+          <div class="file-info hidden" id="file-info">
+            <div class="file-icon">🎵</div>
+            <div class="file-meta">
+              <span class="file-name" id="file-name-display">audio.wav</span>
+              <span class="file-size" id="file-size-display">2.4 MB</span>
+            </div>
+            <button class="file-clear" id="file-clear-btn" title="Remove">✕</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /main-panel -->
+
+    <!-- RESULT PANEL (hidden until analysis) -->
+    <div class="result-panel hidden" id="result-panel">
+      <div class="result-emotion-row">
+        <!-- Circle -->
+        <div class="emotion-circle" id="emotion-circle">
+          <svg class="circle-svg" viewBox="0 0 120 120">
+            <circle class="circle-bg" cx="60" cy="60" r="52" />
+            <circle class="circle-progress" id="circle-progress" cx="60" cy="60" r="52"
+              stroke-dasharray="326.7" stroke-dashoffset="326.7" />
+          </svg>
+          <div class="circle-content">
+            <span class="emotion-emoji" id="result-emoji">😊</span>
+            <span class="confidence-pct" id="result-confidence">0%</span>
+          </div>
+        </div>
+
+        <!-- Label & bars -->
+        <div class="result-right">
+          <div class="detected-label">
+            <span class="detected-tag">Detected Emotion</span>
+            <h2 class="emotion-name" id="result-emotion-label">Happy</h2>
+          </div>
+          <div class="emotion-bars" id="emotion-bars"></div>
+        </div>
+      </div>
+
+      <!-- Reset -->
+      <div class="result-actions">
+        <button class="btn btn-secondary" id="reset-btn">↺ Analyze Another</button>
+        <button class="btn btn-primary" id="export-btn">⬇ Export Report</button>
+      </div>
+    </div><!-- /result-panel -->
+
+    <!-- HISTORY PANEL (hidden until requested) -->
+    <div class="history-panel glass-card hidden" id="history-panel">
+      <div class="history-header">
+        <h2 class="history-title">📊 Analysis History</h2>
+        <button class="btn btn-outline" id="refresh-history-btn">
+          <span class="icon">🔄</span> Refresh
+        </button>
+      </div>
+      
+      <div class="history-content" id="history-content">
+        <div class="history-loading" id="history-loading">
+          <div class="loading-spinner-small"></div>
+          <p>Loading history...</p>
+        </div>
+        
+        <div class="history-empty hidden" id="history-empty">
+          <div class="empty-icon">📭</div>
+          <p>No analysis history found</p>
+          <p class="empty-sub">Start analyzing emotions to see your history here</p>
+        </div>
+        
+        <div class="history-list" id="history-list"></div>
+      </div>
+      
+      <div class="history-actions">
+        <button class="btn btn-secondary" id="back-to-main-btn">
+          <span class="icon">←</span> Back to Analysis
+        </button>
+        <button class="btn btn-primary" id="clear-history-btn">
+          <span class="icon">🗑️</span> Clear History
+        </button>
+      </div>
+    </div><!-- /history-panel -->
+
+  </div><!-- /app-frame -->
+
+  <!-- LOADING OVERLAY -->
+  <div class="loading-overlay hidden" id="loading-overlay">
+    <div class="loading-card glass-card">
+      <div class="loading-spinner">
+        <div class="spinner-ring r1"></div>
+        <div class="spinner-ring r2"></div>
+        <div class="spinner-ring r3"></div>
+        <div class="spinner-core">🧠</div>
+      </div>
+      <h3 class="loading-title">Analyzing Voice…</h3>
+      <p class="loading-desc">Processing audio through neural network</p>
+      <div class="loading-progress">
+        <div class="loading-bar" id="loading-bar"></div>
+      </div>
+      <div class="loading-steps">
+        <span class="step active" id="step-1">Feature Extraction</span>
+        <span class="step-arrow">›</span>
+        <span class="step" id="step-2">LSTM Processing</span>
+        <span class="step-arrow">›</span>
+        <span class="step" id="step-3">Classification</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- SVG Gradient Def -->
+  <svg style="position:absolute;width:0;height:0">
+    <defs>
+      <linearGradient id="circleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#8A2BE2"/>
+        <stop offset="100%" stop-color="#00FFFF"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <script type="module" src="orb.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
