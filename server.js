@@ -643,6 +643,7 @@ async function storeEmotionAnalysis(analysis, audioData = null) {
   if (!supabase) return null;
   
   try {
+    const confidence = analysis.data[analysis.primary] || 0;
     const { data, error } = await supabase
       .from('emotion_analyses')
       .insert([
@@ -650,6 +651,7 @@ async function storeEmotionAnalysis(analysis, audioData = null) {
           primary_emotion: analysis.primary,
           emotion_data: analysis.data,
           transcription: analysis.transcription,
+          confidence: confidence,
           audio_size: audioData?.size,
           created_at: new Date().toISOString()
         }
@@ -717,11 +719,13 @@ app.post('/predict', upload.single('audio'), async (req, res) => {
       await storeEmotionAnalysis(emotionData, { size: req.file.size });
     } else {
       // Store in in-memory history for development
+      const confidence = emotionData.data[emotionData.primary] || 0;
       const historyItem = {
         id: Date.now(),
         primary: emotionData.primary,
         data: emotionData.data,
         transcription: emotionData.transcription,
+        confidence: confidence,
         timestamp: new Date().toISOString(),
         audio_size: req.file.size
       };
