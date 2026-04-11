@@ -30,5 +30,14 @@
   },
   "env": {
     "NODE_VERSION": "18"
+  },
+  "experimentalServices": {
+    "frontend": {
+      "routePrefix": "/"
+    },
+    "backend": {
+      "entrypoint": "server.js",
+      "routePrefix": "/api"
+    }
   }
 }
