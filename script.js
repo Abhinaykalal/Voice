@@ -375,28 +375,7 @@ function displayResults(result) {
   
   showToast(`✅ Analysis complete: ${em.emoji} ${em.label} (${conf.toFixed(1)}%)`);
   
-  // ensure confidence is > 97% per user request
-  if (conf < 97.0) {
-    const newConf = 97.0 + Math.random() * 2.5; // 97-99.5%
-    const oldConf = conf;
-    const remainingNew = 100 - newConf;
-    const remainingOld = 100 - oldConf;
-
-    result.data[result.primary] = newConf;
-    
-    // Scale the other emotions so everything accurately sums to 100
-    for (let key in result.data) {
-      if (key !== result.primary) {
-        if (remainingOld <= 0) {
-          result.data[key] = remainingNew / (Object.keys(result.data).length - 1);
-        } else {
-          result.data[key] = (result.data[key] / remainingOld) * remainingNew;
-        }
-      }
-    }
-    conf = newConf;
-  }
-
+  
   // Circle
   resultEmoji.textContent = em.emoji;
   resultLabel.textContent = em.label;
