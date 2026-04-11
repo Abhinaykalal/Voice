@@ -1,18 +1,5 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "public"
-      }
-    }
-  ],
   "routes": [
     {
       "src": "/api/(.*)",
@@ -23,11 +10,6 @@
       "dest": "/$1"
     }
   ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 30
-    }
-  },
   "env": {
     "NODE_VERSION": "18"
   },
