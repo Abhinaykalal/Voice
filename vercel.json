@@ -2,8 +2,8 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/main.py",
-      "use": "@vercel/python"
+      "src": "server.js",
+      "use": "@vercel/node"
     },
     {
       "src": "package.json",
@@ -15,8 +15,8 @@
   ],
   "routes": [
     {
-      "src": "/_/backend/(.*)",
-      "dest": "/backend/main.py"
+      "src": "/api/(.*)",
+      "dest": "/server.js"
     },
     {
       "src": "/(.*)",
@@ -24,11 +24,11 @@
     }
   ],
   "functions": {
-    "backend/main.py": {
+    "server.js": {
       "maxDuration": 30
     }
   },
   "env": {
-    "PYTHON_VERSION": "3.9"
+    "NODE_VERSION": "18"
   }
 }
