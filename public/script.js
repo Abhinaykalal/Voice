@@ -50,14 +50,20 @@ window.switchTab = function(tabName) {
 };
 
 /* ── Interactive Background ──────────────────────────────────── */
-const interactiveBg = document.querySelector('.interactive-bg');
-document.addEventListener('mousemove', (e) => {
+let interactiveBg = null;
+let initialized = false;
+
+function initializeApp() {
+  interactiveBg = document.querySelector('.interactive-bg');
   if (!interactiveBg) return;
-  const x = (e.clientX / window.innerWidth) * 100 + '%';
-  const y = (e.clientY / window.innerHeight) * 100 + '%';
-  interactiveBg.style.setProperty('--mouse-x', x);
-  interactiveBg.style.setProperty('--mouse-y', y);
-});
+  document.addEventListener('mousemove', (e) => {
+    const x = (e.clientX / window.innerWidth) * 100 + '%';
+    const y = (e.clientY / window.innerHeight) * 100 + '%';
+    interactiveBg.style.setProperty('--mouse-x', x);
+    interactiveBg.style.setProperty('--mouse-y', y);
+  });
+  initialized = true;
+}
 
 
 
@@ -601,5 +607,23 @@ clearHistoryBtn.addEventListener('click', async () => {
     }
   }
 });
+
+// Initialize app when DOM is loaded or when client-side
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initializeApp();
+  });
+} else if (typeof window !== 'undefined') {
+  // For Next.js client-side navigation
+  setTimeout(() => {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      initializeApp();
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        initializeApp();
+      });
+    }
+  }, 100);
+}
 
 console.log('%c🧠 Emotion AI Front-End Ready', 'color:#00FFFF;font-weight:bold;');
