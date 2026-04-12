@@ -8,8 +8,8 @@
     "dev": "next dev",
     "build": "next build",
     "build:frontend": "next build",
-    "start:backend": "node server.js",
-    "dev:backend": "node server.js"
+    "start-backend": "node server.js",
+    "dev-backend": "node server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
