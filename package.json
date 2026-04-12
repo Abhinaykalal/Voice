@@ -12,7 +12,7 @@
     "express": "^4.21.0",
     "cors": "^2.8.5",
     "multer": "^2.0.1",
-    "groq-sdk": "^0.7.0",
+    "groq-sdk": "^1.1.2",
     "@supabase/supabase-js": "^2.45.4",
     "dotenv": "^16.4.5"
   }
