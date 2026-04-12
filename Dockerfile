@@ -5,8 +5,11 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Generate package-lock.json and install dependencies
+RUN npm install --production
+
+# Clean up dev dependencies
+RUN npm prune --production
 
 # Copy backend files
 COPY server.js ./
