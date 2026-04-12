@@ -1,10 +1,9 @@
 {
   "build": {
-    "builder": "DOCKERFILE",
-    "buildCommand": "cp package.backend.json package.json && npm install"
+    "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "npm start:backend",
     "restartPolicyType": "ON_FAILURE",
     "healthcheckPath": "/health"
   }
