@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "if not exist public mkdir public && copy *.html *.css *.js public\\ >nul 2>&1 || echo Build completed"
+    "build": "if not exist public mkdir public && copy *.html *.css *.js public\\ >nul 2>&1 || echo Build completed",
+    "build:frontend": "if not exist public mkdir public && copy *.html *.css *.js public\\ >nul 2>&1 || echo Frontend build completed",
+    "start:backend": "node server.js",
+    "dev:backend": "node server.js"
   },
   "dependencies": {
     "express": "^4.21.0",

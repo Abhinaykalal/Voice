@@ -318,7 +318,7 @@ async function callEmotionAPI(audioBlob) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
     
-    const response = await fetch('http://localhost:3000/predict', {
+    const response = await fetch('https://your-railway-app-url.railway.app/predict', {
       method: 'POST',
       body: formData,
       signal: controller.signal,
@@ -496,7 +496,7 @@ async function loadHistory() {
   historyList.classList.add('hidden');
   
   try {
-    const response = await fetch('http://localhost:3000/history');
+    const response = await fetch('https://your-railway-app-url.railway.app/history');
     if (!response.ok) {
       throw new Error('Failed to fetch history');
     }
@@ -589,7 +589,7 @@ backToMainBtn.addEventListener('click', () => {
 clearHistoryBtn.addEventListener('click', async () => {
   if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
     try {
-      const response = await fetch('http://localhost:3000/history', { method: 'DELETE' });
+      const response = await fetch('https://your-railway-app-url.railway.app/history', { method: 'DELETE' });
       if (response.ok) {
         showToast('🗑️ History cleared successfully');
         loadHistory();

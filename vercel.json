@@ -1,15 +1,20 @@
 {
   "version": 2,
-  "experimentalServices": {
-    "frontend": {
-      "framework": "vite",
-      "routePrefix": "/"
-    },
-    "backend": {
-      "entrypoint": "server.js",
-      "routePrefix": "/api"
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "public"
+      }
     }
-  },
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
   "env": {
     "NODE_VERSION": "18"
   }
