@@ -5,15 +5,18 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Generate package-lock.json and install dependencies
-RUN npm install --production
+# Install all dependencies (including dev dependencies needed for the build)
+RUN npm install
 
-# Clean up dev dependencies
-RUN npm prune --production
-
-# Copy backend files
+# Copy application files
 COPY server.js ./
 COPY .env.example ./
+
+# Run Next.js build to generate the .next directory
+RUN npm run build
+
+# Prune to production-only dependencies after the build
+RUN npm prune --production
 
 # Create necessary directories
 RUN mkdir -p uploads
