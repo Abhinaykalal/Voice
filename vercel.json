@@ -15,15 +15,7 @@
   ],
   "routes": [
     {
-      "src": "/predict",
-      "dest": "/server.js"
-    },
-    {
-      "src": "/history",
-      "dest": "/server.js"
-    },
-    {
-      "src": "/health",
+      "src": "/api/(.*)",
       "dest": "/server.js"
     },
     {

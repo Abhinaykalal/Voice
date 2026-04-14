@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "node -e \"const fs = require('fs'); if (!fs.existsSync('public')) fs.mkdirSync('public'); const files = fs.readdirSync('.').filter(f => (f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.js')) && f !== 'server.js'); files.forEach(f => fs.copyFileSync(f, `public/${f}`)); console.log('Build completed');\"",
+    "build": "node -e \"const fs = require('fs'); const path = require('path'); if (!fs.existsSync('public')) fs.mkdirSync('public'); const files = fs.readdirSync('.').filter(f => (f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.js') || f.endsWith('.webm') || f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.svg')) && f !== 'server.js'); files.forEach(f => { const srcPath = path.join('.', f); const destPath = path.join('public', f); fs.copyFileSync(srcPath, destPath); }); console.log('Build completed - All assets copied to public/');\"",
     "build:frontend": "node -e \"const fs = require('fs'); if (!fs.existsSync('public')) fs.mkdirSync('public'); const files = fs.readdirSync('.').filter(f => (f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.js')) && f !== 'server.js'); files.forEach(f => fs.copyFileSync(f, `public/${f}`)); console.log('Frontend build completed');\"",
     "start-backend": "node server.js",
     "dev-backend": "node server.js"

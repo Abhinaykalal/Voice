@@ -283,7 +283,17 @@ async function runAnalysis() {
   try {
     let audioBlob = uploadedFile;
     if (!audioBlob && recordedAudioReady && recordedChunks.length > 0) {
+      console.log('Creating audio blob from', recordedChunks.length, 'chunks');
       audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+      console.log('Created blob size:', audioBlob.size, 'bytes');
+    }
+    
+    if (!audioBlob) {
+      throw new Error('No audio data available. Please record or upload an audio file first.');
+    }
+    
+    if (audioBlob.size === 0) {
+      throw new Error('Audio file is empty. Please try recording again.');
     }
 
     const startMs = Date.now();
@@ -318,7 +328,15 @@ async function callEmotionAPI(audioBlob) {
   try {
     const formData = new FormData();
     const fileName = uploadedFile ? uploadedFile.name : 'recording.webm';
+    
+    console.log('FormData - Audio blob size:', audioBlob.size, 'bytes');
+    console.log('FormData - File name:', fileName);
+    console.log('FormData - Blob type:', audioBlob.type);
+    
     formData.append('audio', audioBlob, fileName);
+    
+    // Log FormData contents (without logging actual audio data)
+    console.log('FormData created, entries count:', formData.entries.length);
     
     // Call backend API with timeout for Groq API processing
     const controller = new AbortController();
@@ -553,8 +571,8 @@ function createHistoryItem(item, index) {
   
   const timestamp = new Date(item.created_at || item.timestamp).toLocaleString();
   const emotion = item.primary_emotion || item.primary;
-  const confidence = item.confidence || (item.probability_json ? item.probability_json[emotion] : (item.data ? item.data[emotion] : 0));
-  const emotionData = item.probability_json || item.data || {};
+  const emotionData = item.emotion_data || item.data || {};
+  const confidence = emotionData[emotion] || 0;
   
   const emotionInfo = EMOTIONS[emotion] || EMOTIONS.neutral;
   
