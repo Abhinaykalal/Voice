@@ -13,6 +13,11 @@ const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 // Middleware
 app.use(cors()); // Allow all origins for simplicity in Vercel deployment
 app.use(express.json());
+
+// API routes must come before static file serving
+app.use('/api', express.json());
+
+// Static file serving for frontend
 app.use(express.static(path.join(__dirname)));
 
 // Multer setup for file uploads
@@ -86,19 +91,35 @@ function extractAudioFeatures(audioBuffer) {
   try {
     // Convert buffer to Float32Array for analysis
     let audioData;
-    if (audioBuffer instanceof Int16Array) {
+    
+    if (audioBuffer && audioBuffer.buffer) {
+      // Multer memory storage - convert Buffer to Float32Array
+      const buffer = audioBuffer.buffer || audioBuffer;
+      audioData = new Float32Array(buffer.byteLength / 4);
+      const dataView = new DataView(buffer);
+      
+      for (let i = 0; i < audioData.length; i++) {
+        audioData[i] = dataView.getFloat32(i * 4) / 32768.0;
+      }
+    } else if (audioBuffer instanceof Buffer) {
+      // Direct Buffer conversion
+      audioData = new Float32Array(audioBuffer.length / 4);
+      const dataView = new DataView(audioBuffer);
+      
+      for (let i = 0; i < audioData.length; i++) {
+        audioData[i] = dataView.getFloat32(i * 4) / 32768.0;
+      }
+    } else if (audioBuffer instanceof Int16Array) {
       // Convert Int16Array to Float32Array
       audioData = new Float32Array(audioBuffer.length);
       for (let i = 0; i < audioBuffer.length; i++) {
         audioData[i] = audioBuffer[i] / 32768.0;
       }
-    } else if (audioBuffer instanceof Buffer) {
-      // Convert Buffer to Float32Array
-      audioData = new Float32Array(audioBuffer.buffer || audioBuffer);
     } else {
       // Assume it's already Float32Array
       audioData = audioBuffer;
     }
+    
     const sampleRate = 16000; // WebM recording sample rate
     
     // Voice pitch and fundamental frequency analysis
