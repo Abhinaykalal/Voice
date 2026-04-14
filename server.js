@@ -11,8 +11,12 @@ const app = express();
 const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 
 // Middleware
-app.use(cors()); // Allow all origins for simplicity in Vercel deployment
-app.use(express.json());
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://*.up.railway.app', 'https://*.vercel.app'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 // API routes must come before static file serving
 app.use('/api', express.json());
