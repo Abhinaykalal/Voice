@@ -158,8 +158,16 @@ startBtn.addEventListener('click', async () => {
       const src = audioContext.createMediaStreamSource(stream);
       src.connect(analyser);
 
-      // Setup media recorder
-      mediaRecorder  = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      // Setup media recorder with better format support
+      const options = {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+          ? 'audio/webm;codecs=opus' 
+          : MediaRecorder.isTypeSupported('audio/webm') 
+            ? 'audio/webm' 
+            : 'audio/webm;codecs=vorbis'
+      };
+      
+      mediaRecorder = new MediaRecorder(stream, options);
       recordedChunks = [];
       mediaRecorder.ondataavailable = e => { 
         if (e.data.size > 0) recordedChunks.push(e.data); 
@@ -338,41 +346,51 @@ async function callEmotionAPI(audioBlob) {
     // Log FormData contents (without logging actual audio data)
     console.log('FormData created, entries count:', formData.entries.length);
     
-    // Call backend API with timeout for Groq API processing
+    // Call backend API with retry logic and better timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for Whisper + Llama analysis
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for Whisper + Llama analysis
     
-    const response = await fetch('/api/predict', {
-      method: 'POST',
-      body: formData,
-      signal: controller.signal,
-    });
+    let retryCount = 0;
+    const maxRetries = 2;
     
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-      const rawText = await response.text();
-      console.error('❌ Backend error response (raw):', rawText);
-      let errorMsg = response.statusText;
-      try { errorMsg = JSON.parse(rawText).detail || errorMsg; } catch(e) { errorMsg = rawText.slice(0, 200); }
-      throw new Error(`Backend error: ${errorMsg}`);
+    while (retryCount <= maxRetries) {
+      try {
+        const response = await fetch('/api/predict', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const rawText = await response.text();
+          console.error('❌ Backend error response (raw):', rawText);
+          let errorMsg = response.statusText;
+          try { errorMsg = JSON.parse(rawText).detail || errorMsg; } catch(e) { errorMsg = rawText.slice(0, 200); }
+          throw new Error(`Backend error: ${errorMsg}`);
+        }
+        
+        const result = await response.json();
+        console.log('✅ Voice analysis completed:', result);
+        return result;
+        
+      } catch (error) {
+        retryCount++;
+        console.warn(`Attempt ${retryCount} failed:`, error.message);
+        
+        if (retryCount > maxRetries) {
+          throw new Error(`Failed after ${maxRetries + 1} attempts: ${error.message}`);
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount));
+      }
     }
-
-    const rawText = await response.text();
-    let emotionData;
-    try {
-      emotionData = JSON.parse(rawText);
-    } catch(e) {
-      console.error('❌ Failed to parse JSON response:', rawText.slice(0, 500));
-      throw new Error('Server returned invalid JSON. Check console for details.');
-    }
-    
-    // Validate response structure
-    if (!emotionData.primary || !emotionData.data) {
-      throw new Error('Invalid response format from backend');
-    }
-
-    return emotionData;
   } catch (error) {
     throw error;
   }
