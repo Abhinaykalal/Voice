@@ -8,7 +8,7 @@ const Groq = require('groq-sdk');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 
 // Middleware
 app.use(cors()); // Allow all origins for simplicity in Vercel deployment
@@ -1158,13 +1158,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // Start server
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`✅ Emotion Detector API running on http://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`✅ Emotion Detector API running on port ${PORT}`);
+  if (process.env.RAILWAY_PUBLIC_URL) {
+    console.log(`🌐 Railway URL: ${process.env.RAILWAY_PUBLIC_URL}`);
+  } else {
     console.log(`🎙️ Frontend: http://localhost:${PORT}`);
-    console.log(`📡 API endpoint: http://localhost:${PORT}/predict`);
-  });
-}
+    console.log(`📡 API endpoint: http://localhost:${PORT}/api/predict`);
+  }
+});
 
 // Export for Vercel
 module.exports = app;

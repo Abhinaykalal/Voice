@@ -5,29 +5,28 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including dev for build tools)
-RUN npm install
+# Install all dependencies
+RUN npm install --production
 
-# Copy backend files
+# Copy application files
 COPY server.js ./
-COPY .env.example ./
+COPY .env.example .env
+
+# Copy frontend files
+COPY index.html ./
+COPY style.css ./
+COPY script.js ./
+COPY orb.js ./
 
 # Create necessary directories
-RUN mkdir -p uploads
+RUN mkdir -p uploads public
 
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check using correct API endpoint
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
-
-# Start backend server
-CMD ["node", "server.js"]
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => { process.exit(1) })"
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
