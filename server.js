@@ -85,7 +85,20 @@ let analysisHistory = [];
 function extractAudioFeatures(audioBuffer) {
   try {
     // Convert buffer to Float32Array for analysis
-    const audioData = new Float32Array(audioBuffer.buffer);
+    let audioData;
+    if (audioBuffer instanceof Int16Array) {
+      // Convert Int16Array to Float32Array
+      audioData = new Float32Array(audioBuffer.length);
+      for (let i = 0; i < audioBuffer.length; i++) {
+        audioData[i] = audioBuffer[i] / 32768.0;
+      }
+    } else if (audioBuffer instanceof Buffer) {
+      // Convert Buffer to Float32Array
+      audioData = new Float32Array(audioBuffer.buffer || audioBuffer);
+    } else {
+      // Assume it's already Float32Array
+      audioData = audioBuffer;
+    }
     const sampleRate = 16000; // WebM recording sample rate
     
     // Voice pitch and fundamental frequency analysis
@@ -518,7 +531,7 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
       
       // Extract advanced audio features for emotion analysis
       const audioFeatures = extractAudioFeatures(audioBuffer);
-      console.log(`[Audio Features] Loudness: ${audioFeatures.loudness}%, Silence: ${audioFeatures.silence_ratio}%, Intensity: ${audioFeatures.emotional_intensity}`);
+      console.log(`[Audio Features] Pitch: ${audioFeatures.fundamental_freq}Hz, Jitter: ${audioFeatures.jitter}, Spectral Centroid: ${audioFeatures.spectral_centroid}Hz`);
       
       // Transcribe audio with Groq Whisper Large V3
       console.log(`[Groq API] Transcribing with Whisper Large V3...`);
@@ -1039,10 +1052,13 @@ app.post('/predict', (req, res, next) => {
       const historyItem = {
         id: Date.now(),
         primary: emotionData.primary,
+        primary_emotion: emotionData.primary,
+        emotion_data: emotionData.data,
         data: emotionData.data,
         transcription: emotionData.transcription,
         confidence: confidence,
         timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
         audio_size: req.file.size
       };
       analysisHistory.push(historyItem);

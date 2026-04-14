@@ -571,8 +571,8 @@ function createHistoryItem(item, index) {
   
   const timestamp = new Date(item.created_at || item.timestamp).toLocaleString();
   const emotion = item.primary_emotion || item.primary;
-  const confidence = item.confidence || (item.probability_json ? item.probability_json[emotion] : (item.data ? item.data[emotion] : 0));
-  const emotionData = item.probability_json || item.data || {};
+  const emotionData = item.emotion_data || item.data || {};
+  const confidence = emotionData[emotion] || 0;
   
   const emotionInfo = EMOTIONS[emotion] || EMOTIONS.neutral;
   
