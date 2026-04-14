@@ -11,10 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors({
-  origin: ['https://your-vercel-app-url.vercel.app', 'https://localhost:3000'],
-  credentials: true
-}));
+app.use(cors()); // Allow all origins for simplicity in Vercel deployment
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
@@ -832,8 +829,13 @@ app.get('/health', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`✅ Emotion Detector API running on http://localhost:${PORT}`);
-  console.log(`🎙️ Frontend: http://localhost:${PORT}`);
-  console.log(`📡 API endpoint: http://localhost:${PORT}/predict`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`✅ Emotion Detector API running on http://localhost:${PORT}`);
+    console.log(`🎙️ Frontend: http://localhost:${PORT}`);
+    console.log(`📡 API endpoint: http://localhost:${PORT}/predict`);
+  });
+}
+
+// Export for Vercel
+module.exports = app;
