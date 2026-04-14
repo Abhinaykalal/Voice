@@ -43,13 +43,21 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const USE_GROQ = process.env.USE_GROQ === 'true';
 
 let groq = null;
-if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
-  groq = new Groq({ apiKey: GROQ_API_KEY });
-  console.log(`✅ Groq API initialized with key: ${GROQ_API_KEY.substring(0, 20)}...`);
-  console.log(`🚀 Using Groq models: Whisper Large V3 + Llama 3.3 70B`);
-} else if (USE_GROQ) {
-  console.warn('⚠️  USE_GROQ is enabled but GROQ_API_KEY is not set');
-  console.warn('   Get a free key from: https://console.groq.com/keys');
+if (USE_GROQ) {
+  if (GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here' && GROQ_API_KEY.length > 10) {
+    try {
+      groq = new Groq({ apiKey: GROQ_API_KEY });
+      console.log(`✅ Groq API initialized with key: ${GROQ_API_KEY.substring(0, 20)}...`);
+      console.log(`🚀 Using Groq models: Whisper Large V3 + Llama 3.3 70B`);
+    } catch (error) {
+      console.error('❌ Failed to initialize Groq API:', error.message);
+      groq = null;
+    }
+  } else {
+    console.error('❌ GROQ_API_KEY is missing or invalid');
+    console.error('   Please set GROQ_API_KEY in your environment variables');
+    console.error('   Get a free key from: https://console.groq.com/keys');
+  }
 }
 
 // HuggingFace API Setup (Free tier available)
