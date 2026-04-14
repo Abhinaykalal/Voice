@@ -262,7 +262,7 @@ function extractEnergyFeatures(audioData) {
     rms: rms.toFixed(4),
     loudness_db: loudness.toFixed(1),
     energy_variance: energyVariance.toFixed(2),
-    energy_dynamics: (Math.sqrt(energyVariance) / meanEnergy).toFixed(3)
+    energy_dynamics: (meanEnergy > 0 ? (Math.sqrt(energyVariance) / meanEnergy).toFixed(3) : '0.000')
   };
 }
 
@@ -341,7 +341,7 @@ function calculateSpectralCentroid(magnitudeSpectrum, sampleRate) {
     magnitudeSum += magnitudeSpectrum[k];
   }
   
-  return magnitudeSum > 0 ? weightedSum / magnitudeSum : 0;
+  return magnitudeSum > 0 && !isNaN(weightedSum) && !isNaN(magnitudeSum) ? weightedSum / magnitudeSum : 0;
 }
 
 function calculateSpectralRolloff(magnitudeSpectrum, sampleRate) {
@@ -368,7 +368,7 @@ function calculateSpectralBandwidth(magnitudeSpectrum, sampleRate, centroid) {
     magnitudeSum += magnitudeSpectrum[k];
   }
   
-  return magnitudeSum > 0 ? Math.sqrt(weightedSum / magnitudeSum) : 0;
+  return magnitudeSum > 0 && !isNaN(weightedSum) && !isNaN(magnitudeSum) && !isNaN(centroid) ? Math.sqrt(weightedSum / magnitudeSum) : 0;
 }
 
 function calculateSpectralFlux(magnitudeSpectrum) {
@@ -1009,8 +1009,8 @@ async function getEmotionHistory(limit = 50) {
   }
 }
 
-// POST /predict - Analyze audio
-app.post('/predict', (req, res, next) => {
+// POST /api/predict - Analyze audio
+app.post('/api/predict', (req, res, next) => {
   upload.single('audio')(req, res, function(err) {
     if (err instanceof multer.MulterError) {
       console.error('[Multer Error]', err);
@@ -1095,8 +1095,8 @@ app.post('/predict', (req, res, next) => {
   }
 });
 
-// GET /history - Retrieve emotion analysis history
-app.get('/history', async (req, res) => {
+// GET /api/history - Retrieve emotion analysis history
+app.get('/api/history', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     
@@ -1126,8 +1126,8 @@ app.get('/history', async (req, res) => {
   }
 });
 
-// DELETE /history - Clear emotion analysis history
-app.delete('/history', async (req, res) => {
+// DELETE /api/history - Clear emotion analysis history
+app.delete('/api/history', async (req, res) => {
   try {
     // If Supabase is configured, clear it there
     if (USE_SUPABASE && supabase) {
@@ -1153,7 +1153,7 @@ app.delete('/history', async (req, res) => {
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Emotion Detector API is running' });
 });
 
