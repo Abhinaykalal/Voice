@@ -16,19 +16,19 @@
   "routes": [
     {
       "src": "/predict",
-      "dest": "server.js"
+      "dest": "/server.js"
     },
     {
       "src": "/history",
-      "dest": "server.js"
+      "dest": "/server.js"
     },
     {
       "src": "/health",
-      "dest": "server.js"
+      "dest": "/server.js"
     },
     {
       "src": "/(.*)",
-      "dest": "/$1"
+      "dest": "/public/$1"
     }
   ]
 }

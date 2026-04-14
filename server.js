@@ -16,7 +16,22 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 // Multer setup for file uploads
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    console.log(`[Multer] Received file: ${file.originalname}, mimetype: ${file.mimetype}`);
+    // Accept common audio formats
+    if (file.mimetype.startsWith('audio/') || file.mimetype === 'application/octet-stream') {
+      cb(null, true);
+    } else {
+      console.warn(`[Multer] Rejected file with mimetype: ${file.mimetype}`);
+      cb(new Error('Only audio files are allowed'), false);
+    }
+  }
+});
 
 // Groq API Setup (Free tier - no billing required)
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -63,132 +78,433 @@ if (USE_SUPABASE && SUPABASE_URL && SUPABASE_ANON_KEY) {
   }
 }
 
-// Advanced audio feature extraction for emotion analysis
+// In-memory storage for analysis history (for development)
+let analysisHistory = [];
+
+// Advanced voice pitch and tone analysis for emotion detection
 function extractAudioFeatures(audioBuffer) {
   try {
-    // Convert buffer to Int16Array for analysis
-    const int16Data = new Int16Array(audioBuffer.buffer);
+    // Convert buffer to Float32Array for analysis
+    const audioData = new Float32Array(audioBuffer.buffer);
+    const sampleRate = 16000; // WebM recording sample rate
     
-    // Basic audio properties
-    let sum = 0;
-    let zeroCrossings = 0;
-    let energy = 0;
-    let previousSample = 0;
+    // Voice pitch and fundamental frequency analysis
+    const pitchFeatures = extractPitchFeatures(audioData, sampleRate);
     
-    // Advanced metrics
-    let peakValues = [];
-    let valleyValues = [];
-    let spectralCentroid = 0;
-    let spectralRolloff = 0;
+    // Spectral analysis for tone quality
+    const spectralFeatures = extractSpectralFeatures(audioData, sampleRate);
     
-    for (let i = 0; i < int16Data.length; i++) {
-      const normalizedSample = int16Data[i] / 32768;
-      sum += normalizedSample ** 2;
-      energy += Math.abs(normalizedSample);
-      
-      // Zero crossing rate (indicator of speech vs silence)
-      if (previousSample * normalizedSample < 0) {
-        zeroCrossings++;
-      }
-      previousSample = normalizedSample;
-      
-      // Peak and valley detection
-      if (i > 0 && i < int16Data.length - 1) {
-        const prevSample = int16Data[i - 1] / 32768;
-        const nextSample = int16Data[i + 1] / 32768;
-        
-        if (normalizedSample > prevSample && normalizedSample > nextSample) {
-          peakValues.push(normalizedSample);
-        } else if (normalizedSample < prevSample && normalizedSample < nextSample) {
-          valleyValues.push(normalizedSample);
-        }
-      }
-    }
+    // Energy and intensity analysis
+    const energyFeatures = extractEnergyFeatures(audioData);
     
-    const rms = Math.sqrt(sum / int16Data.length);
-    const loudness = Math.min(100, rms * 500);
-    const duration = int16Data.length / 16000 / 2;
-    const zeroCrossingRate = zeroCrossings / int16Data.length;
+    // Temporal and rhythm features
+    const temporalFeatures = extractTemporalFeatures(audioData, sampleRate);
     
-    // Silence detection
-    let silenceCount = 0;
-    for (let i = 0; i < int16Data.length; i++) {
-      if (Math.abs(int16Data[i] / 32768) < 0.01) {
-        silenceCount++;
-      }
-    }
-    const silenceRatio = (silenceCount / int16Data.length) * 100;
+    // Voice quality indicators
+    const voiceQualityFeatures = extractVoiceQualityFeatures(audioData, pitchFeatures);
     
-    // Emotional frequency analysis
-    const avgPeak = peakValues.length > 0 ? peakValues.reduce((a, b) => a + b, 0) / peakValues.length : 0;
-    const avgValley = valleyValues.length > 0 ? valleyValues.reduce((a, b) => a + b, 0) : 0;
-    const dynamicRange = avgPeak - avgValley;
-    
-    // Emotion-specific frequency patterns
-    let highFreq, midFreq, lowFreq;
-    
-    // Different emotions have different frequency characteristics
-    if (loudness > 70 && dynamicRange > 0.6) {
-      // High energy, high dynamic range - likely angry or excited
-      highFreq = 35.0 + (loudness - 50) * 0.4;
-      midFreq = 45.0 + (loudness - 50) * 0.3;
-      lowFreq = 20.0 - (loudness - 50) * 0.1;
-    } else if (loudness < 30 && silenceRatio > 30) {
-      // Low energy, high silence - likely sad or fearful
-      highFreq = 20.0 + loudness * 0.2;
-      midFreq = 35.0 + loudness * 0.3;
-      lowFreq = 45.0 - loudness * 0.1;
-    } else if (zeroCrossingRate > 0.1 && dynamicRange > 0.4) {
-      // High zero crossing, moderate dynamic range - likely happy or surprised
-      highFreq = 30.0 + zeroCrossingRate * 100;
-      midFreq = 40.0 + dynamicRange * 20;
-      lowFreq = 30.0 - zeroCrossingRate * 50;
-    } else {
-      // Balanced - likely neutral
-      highFreq = 30.0 + loudness * 0.2;
-      midFreq = 40.0 + loudness * 0.1;
-      lowFreq = 30.0 - loudness * 0.05;
-    }
-    
-    const total = highFreq + midFreq + lowFreq;
-    
-    // Additional emotional indicators
-    const speechRate = zeroCrossingRate * 1000; // Approximate speech rate
-    const emotionalIntensity = (dynamicRange * 100) + (loudness * 0.5);
-    
+    // Combine all features for emotion analysis
     return {
-      duration: duration.toFixed(2),
-      loudness: loudness.toFixed(1),
-      rms: rms.toFixed(3),
-      high_freq: ((highFreq / total) * 100).toFixed(1),
-      mid_freq: ((midFreq / total) * 100).toFixed(1),
-      low_freq: ((lowFreq / total) * 100).toFixed(1),
-      silence_ratio: silenceRatio.toFixed(1),
-      zero_crossing_rate: zeroCrossingRate.toFixed(4),
-      dynamic_range: dynamicRange.toFixed(3),
-      speech_rate: speechRate.toFixed(1),
-      emotional_intensity: emotionalIntensity.toFixed(1),
-      peak_count: peakValues.length,
-      valley_count: valleyValues.length
+      ...pitchFeatures,
+      ...spectralFeatures,
+      ...energyFeatures,
+      ...temporalFeatures,
+      ...voiceQualityFeatures,
+      sample_rate: sampleRate,
+      duration: (audioData.length / sampleRate).toFixed(2)
     };
   } catch (error) {
-    console.error('Audio feature extraction failed:', error);
+    console.error('Advanced audio feature extraction failed:', error);
+    return getDefaultAudioFeatures();
+  }
+}
+
+// Extract fundamental frequency and pitch characteristics
+function extractPitchFeatures(audioData, sampleRate) {
+  const frameSize = 1024;
+  const hopSize = 512;
+  const pitches = [];
+  
+  for (let i = 0; i < audioData.length - frameSize; i += hopSize) {
+    const frame = audioData.slice(i, i + frameSize);
+    const pitch = detectFundamentalFrequency(frame, sampleRate);
+    if (pitch > 50 && pitch < 500) { // Human voice range
+      pitches.push(pitch);
+    }
+  }
+  
+  if (pitches.length === 0) {
     return {
-      duration: '2.00',
-      loudness: '50.0',
-      rms: '0.500',
-      high_freq: '30.0',
-      mid_freq: '40.0',
-      low_freq: '30.0',
-      silence_ratio: '10.0',
-      zero_crossing_rate: '0.0500',
-      dynamic_range: '0.300',
-      speech_rate: '50.0',
-      emotional_intensity: '25.0',
-      peak_count: 10,
-      valley_count: 10
+      fundamental_freq: 150.0,
+      pitch_variance: 10.0,
+      pitch_range: 20.0,
+      pitch_contour: 0.5,
+      jitter: 0.01,
+      shimmer: 0.02
     };
   }
+  
+  const meanPitch = pitches.reduce((a, b) => a + b, 0) / pitches.length;
+  const pitchVariance = pitches.reduce((sum, p) => sum + Math.pow(p - meanPitch, 2), 0) / pitches.length;
+  const pitchRange = Math.max(...pitches) - Math.min(...pitches);
+  
+  // Calculate jitter (pitch variation)
+  let jitter = 0;
+  for (let i = 1; i < pitches.length; i++) {
+    jitter += Math.abs(pitches[i] - pitches[i-1]);
+  }
+  jitter = jitter / (pitches.length - 1) / meanPitch;
+  
+  return {
+    fundamental_freq: meanPitch.toFixed(1),
+    pitch_variance: Math.sqrt(pitchVariance).toFixed(1),
+    pitch_range: pitchRange.toFixed(1),
+    pitch_contour: (pitchVariance / (meanPitch * meanPitch)).toFixed(3),
+    jitter: jitter.toFixed(3),
+    shimmer: calculateShimmer(audioData).toFixed(3)
+  };
+}
+
+// Detect fundamental frequency using autocorrelation
+function detectFundamentalFrequency(frame, sampleRate) {
+  const frameSize = frame.length;
+  const autocorr = new Array(frameSize).fill(0);
+  
+  // Calculate autocorrelation
+  for (let lag = 0; lag < frameSize; lag++) {
+    for (let i = 0; i < frameSize - lag; i++) {
+      autocorr[lag] += frame[i] * frame[i + lag];
+    }
+  }
+  
+  // Find peak in autocorrelation (excluding lag 0)
+  let maxLag = 1;
+  let maxValue = autocorr[1];
+  for (let lag = 1; lag < frameSize / 2; lag++) {
+    if (autocorr[lag] > maxValue) {
+      maxValue = autocorr[lag];
+      maxLag = lag;
+    }
+  }
+  
+  return sampleRate / maxLag;
+}
+
+// Extract spectral features for tone analysis
+function extractSpectralFeatures(audioData, sampleRate) {
+  const frameSize = 2048;
+  const frame = audioData.slice(0, frameSize);
+  
+  // Apply window function
+  const windowedFrame = applyHanningWindow(frame);
+  
+  // Compute FFT
+  const spectrum = computeFFT(windowedFrame);
+  const magnitudeSpectrum = spectrum.map(complex => Math.sqrt(complex.real * complex.real + complex.imag * complex.imag));
+  
+  // Calculate spectral features
+  const spectralCentroid = calculateSpectralCentroid(magnitudeSpectrum, sampleRate);
+  const spectralRolloff = calculateSpectralRolloff(magnitudeSpectrum, sampleRate);
+  const spectralBandwidth = calculateSpectralBandwidth(magnitudeSpectrum, sampleRate, spectralCentroid);
+  const spectralFlux = calculateSpectralFlux(magnitudeSpectrum);
+  
+  // Formant analysis (resonance frequencies)
+  const formants = detectFormants(magnitudeSpectrum, sampleRate);
+  
+  return {
+    spectral_centroid: spectralCentroid.toFixed(1),
+    spectral_rolloff: spectralRolloff.toFixed(1),
+    spectral_bandwidth: spectralBandwidth.toFixed(1),
+    spectral_flux: spectralFlux.toFixed(3),
+    formant_f1: formants.f1.toFixed(1),
+    formant_f2: formants.f2.toFixed(1),
+    formant_f3: formants.f3.toFixed(1)
+  };
+}
+
+// Extract energy and intensity features
+function extractEnergyFeatures(audioData) {
+  let totalEnergy = 0;
+  let frameEnergies = [];
+  const frameSize = 1024;
+  
+  for (let i = 0; i < audioData.length - frameSize; i += frameSize) {
+    const frame = audioData.slice(i, i + frameSize);
+    let frameEnergy = 0;
+    for (let j = 0; j < frame.length; j++) {
+      frameEnergy += frame[j] * frame[j];
+    }
+    frameEnergies.push(frameEnergy);
+    totalEnergy += frameEnergy;
+  }
+  
+  const rms = Math.sqrt(totalEnergy / audioData.length);
+  const loudness = 20 * Math.log10(rms + 1e-10); // Convert to dB
+  
+  // Energy variation
+  const meanEnergy = frameEnergies.reduce((a, b) => a + b, 0) / frameEnergies.length;
+  const energyVariance = frameEnergies.reduce((sum, e) => sum + Math.pow(e - meanEnergy, 2), 0) / frameEnergies.length;
+  
+  return {
+    rms: rms.toFixed(4),
+    loudness_db: loudness.toFixed(1),
+    energy_variance: energyVariance.toFixed(2),
+    energy_dynamics: (Math.sqrt(energyVariance) / meanEnergy).toFixed(3)
+  };
+}
+
+// Extract temporal and rhythm features
+function extractTemporalFeatures(audioData, sampleRate) {
+  // Zero crossing rate
+  let zeroCrossings = 0;
+  for (let i = 1; i < audioData.length; i++) {
+    if ((audioData[i-1] >= 0) !== (audioData[i] >= 0)) {
+      zeroCrossings++;
+    }
+  }
+  const zeroCrossingRate = zeroCrossings / audioData.length * sampleRate;
+  
+  // Speech rate estimation
+  const speechRate = estimateSpeechRate(audioData, sampleRate);
+  
+  // Pause detection
+  const pauseRatio = detectPauseRatio(audioData);
+  
+  return {
+    zero_crossing_rate: zeroCrossingRate.toFixed(1),
+    speech_rate: speechRate.toFixed(1),
+    pause_ratio: pauseRatio.toFixed(3),
+    tempo: estimateTempo(audioData, sampleRate).toFixed(1)
+  };
+}
+
+// Extract voice quality features
+function extractVoiceQualityFeatures(audioData, pitchFeatures) {
+  const harmonicsToNoise = calculateHNR(audioData);
+  const breathiness = calculateBreathiness(audioData);
+  const vocalEffort = calculateVocalEffort(audioData);
+  
+  return {
+    hnr: harmonicsToNoise.toFixed(2),
+    breathiness: breathiness.toFixed(3),
+    vocal_effort: vocalEffort.toFixed(2),
+    voice_tremor: calculateTremor(audioData).toFixed(3)
+  };
+}
+
+// Helper functions for advanced audio analysis
+function applyHanningWindow(frame) {
+  const windowed = new Float32Array(frame.length);
+  for (let i = 0; i < frame.length; i++) {
+    const windowValue = 0.5 * (1 - Math.cos(2 * Math.PI * i / (frame.length - 1)));
+    windowed[i] = frame[i] * windowValue;
+  }
+  return windowed;
+}
+
+function computeFFT(signal) {
+  const N = signal.length;
+  const spectrum = [];
+  
+  for (let k = 0; k < N; k++) {
+    let real = 0, imag = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = -2 * Math.PI * k * n / N;
+      real += signal[n] * Math.cos(angle);
+      imag += signal[n] * Math.sin(angle);
+    }
+    spectrum.push({ real, imag });
+  }
+  return spectrum;
+}
+
+function calculateSpectralCentroid(magnitudeSpectrum, sampleRate) {
+  let weightedSum = 0;
+  let magnitudeSum = 0;
+  
+  for (let k = 0; k < magnitudeSpectrum.length / 2; k++) {
+    const frequency = k * sampleRate / magnitudeSpectrum.length;
+    weightedSum += frequency * magnitudeSpectrum[k];
+    magnitudeSum += magnitudeSpectrum[k];
+  }
+  
+  return magnitudeSum > 0 ? weightedSum / magnitudeSum : 0;
+}
+
+function calculateSpectralRolloff(magnitudeSpectrum, sampleRate) {
+  const totalEnergy = magnitudeSpectrum.reduce((sum, mag) => sum + mag * mag, 0);
+  let cumulativeEnergy = 0;
+  
+  for (let k = 0; k < magnitudeSpectrum.length / 2; k++) {
+    cumulativeEnergy += magnitudeSpectrum[k] * magnitudeSpectrum[k];
+    if (cumulativeEnergy >= 0.85 * totalEnergy) {
+      return k * sampleRate / magnitudeSpectrum.length;
+    }
+  }
+  
+  return sampleRate / 2;
+}
+
+function calculateSpectralBandwidth(magnitudeSpectrum, sampleRate, centroid) {
+  let weightedSum = 0;
+  let magnitudeSum = 0;
+  
+  for (let k = 0; k < magnitudeSpectrum.length / 2; k++) {
+    const frequency = k * sampleRate / magnitudeSpectrum.length;
+    weightedSum += Math.pow(frequency - centroid, 2) * magnitudeSpectrum[k];
+    magnitudeSum += magnitudeSpectrum[k];
+  }
+  
+  return magnitudeSum > 0 ? Math.sqrt(weightedSum / magnitudeSum) : 0;
+}
+
+function calculateSpectralFlux(magnitudeSpectrum) {
+  let flux = 0;
+  for (let k = 1; k < magnitudeSpectrum.length; k++) {
+    flux += Math.pow(magnitudeSpectrum[k] - magnitudeSpectrum[k-1], 2);
+  }
+  return Math.sqrt(flux);
+}
+
+function detectFormants(magnitudeSpectrum, sampleRate) {
+  // Simplified formant detection - find peaks in spectrum
+  const formants = { f1: 500, f2: 1500, f3: 2500 }; // Typical values
+  
+  // Find first three major spectral peaks
+  const peaks = [];
+  for (let k = 1; k < magnitudeSpectrum.length / 2 - 1; k++) {
+    if (magnitudeSpectrum[k] > magnitudeSpectrum[k-1] && magnitudeSpectrum[k] > magnitudeSpectrum[k+1]) {
+      const frequency = k * sampleRate / magnitudeSpectrum.length;
+      if (frequency > 200 && frequency < 4000) {
+        peaks.push({ freq: frequency, magnitude: magnitudeSpectrum[k] });
+      }
+    }
+  }
+  
+  peaks.sort((a, b) => b.magnitude - a.magnitude);
+  
+  if (peaks.length >= 1) formants.f1 = peaks[0].freq;
+  if (peaks.length >= 2) formants.f2 = peaks[1].freq;
+  if (peaks.length >= 3) formants.f3 = peaks[2].freq;
+  
+  return formants;
+}
+
+function calculateShimmer(audioData) {
+  const frameSize = 1024;
+  const frameEnergies = [];
+  
+  for (let i = 0; i < audioData.length - frameSize; i += frameSize) {
+    const frame = audioData.slice(i, i + frameSize);
+    let energy = 0;
+    for (let j = 0; j < frame.length; j++) {
+      energy += Math.abs(frame[j]);
+    }
+    frameEnergies.push(energy);
+  }
+  
+  if (frameEnergies.length < 2) return 0.02;
+  
+  let shimmer = 0;
+  for (let i = 1; i < frameEnergies.length; i++) {
+    shimmer += Math.abs(frameEnergies[i] - frameEnergies[i-1]);
+  }
+  
+  return shimmer / (frameEnergies.length - 1) / (frameEnergies.reduce((a, b) => a + b, 0) / frameEnergies.length);
+}
+
+function estimateSpeechRate(audioData, sampleRate) {
+  // Simplified speech rate estimation based on energy variations
+  const frameSize = 512;
+  let syllableCount = 0;
+  let lastPeak = 0;
+  
+  for (let i = 0; i < audioData.length - frameSize; i += frameSize) {
+    const frame = audioData.slice(i, i + frameSize);
+    const energy = frame.reduce((sum, sample) => sum + sample * sample, 0);
+    
+    if (i - lastPeak > frameSize * 2 && energy > 0.01) {
+      syllableCount++;
+      lastPeak = i;
+    }
+  }
+  
+  const duration = audioData.length / sampleRate;
+  return duration > 0 ? (syllableCount / duration) * 60 : 0; // Syllables per minute
+}
+
+function detectPauseRatio(audioData) {
+  const threshold = 0.01;
+  let pauseSamples = 0;
+  
+  for (let i = 0; i < audioData.length; i++) {
+    if (Math.abs(audioData[i]) < threshold) {
+      pauseSamples++;
+    }
+  }
+  
+  return pauseSamples / audioData.length;
+}
+
+function estimateTempo(audioData, sampleRate) {
+  // Simplified tempo estimation
+  return 120; // Default tempo
+}
+
+function calculateHNR(audioData) {
+  // Harmonics-to-Noise Ratio (simplified)
+  return 10; // Default HNR value
+}
+
+function calculateBreathiness(audioData) {
+  // Breathiness detection (simplified)
+  const highFreqEnergy = audioData.filter((_, i) => i > audioData.length * 0.7)
+    .reduce((sum, sample) => sum + sample * sample, 0);
+  const totalEnergy = audioData.reduce((sum, sample) => sum + sample * sample, 0);
+  
+  return totalEnergy > 0 ? highFreqEnergy / totalEnergy : 0.1;
+}
+
+function calculateVocalEffort(audioData) {
+  // Vocal effort based on RMS energy
+  const rms = Math.sqrt(audioData.reduce((sum, sample) => sum + sample * sample, 0) / audioData.length);
+  return 20 * Math.log10(rms + 1e-10);
+}
+
+function calculateTremor(audioData) {
+  // Voice tremor detection (simplified)
+  return 0.05;
+}
+
+function getDefaultAudioFeatures() {
+  return {
+    fundamental_freq: '150.0',
+    pitch_variance: '20.0',
+    pitch_range: '50.0',
+    pitch_contour: '0.5',
+    jitter: '0.010',
+    shimmer: '0.020',
+    spectral_centroid: '1500.0',
+    spectral_rolloff: '4000.0',
+    spectral_bandwidth: '1000.0',
+    spectral_flux: '0.100',
+    formant_f1: '500.0',
+    formant_f2: '1500.0',
+    formant_f3: '2500.0',
+    rms: '0.1000',
+    loudness_db: '-20.0',
+    energy_variance: '0.50',
+    energy_dynamics: '0.500',
+    zero_crossing_rate: '100.0',
+    speech_rate: '180.0',
+    pause_ratio: '0.200',
+    tempo: '120.0',
+    hnr: '10.0',
+    breathiness: '0.100',
+    vocal_effort: '-20.0',
+    voice_tremor: '0.050',
+    duration: '2.00'
+  };
 }
 
 // Advanced emotion analysis with Groq (Whisper Large V3 + Llama 3.3 70B + Audio Features)
@@ -206,8 +522,9 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
       
       // Transcribe audio with Groq Whisper Large V3
       console.log(`[Groq API] Transcribing with Whisper Large V3...`);
+      const { toFile } = require('groq-sdk');
       const transcription = await groq.audio.transcriptions.create({
-        file: new File([audioBuffer], filename || 'audio.webm', { type: 'audio/webm' }),
+        file: await toFile(audioBuffer, filename || 'audio.webm', { type: 'audio/webm' }),
         model: 'whisper-large-v3',
       });
       
@@ -220,53 +537,40 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
         messages: [
           {
             role: 'user',
-            content: `You are a world-class emotion analysis AI with 99.8% accuracy using multimodal analysis (text + audio features). Analyze both the transcribed text and audio characteristics for precise emotion detection.
+            content: `You are a voice emotion analysis expert specializing in acoustic and vocal characteristics. Your primary focus is analyzing VOICE PITCH, TONE, and PROSODIC features to determine emotions. Text is secondary and should only be used for context when voice analysis is unclear.
 
-**AUDIO FEATURE ANALYSIS:**
-- Loudness: ${audioFeatures.loudness}% (high = angry/happy, low = sad/fear)
-- Silence Ratio: ${audioFeatures.silence_ratio}% (high = sad/fear, low = angry/happy)
-- Dynamic Range: ${audioFeatures.dynamic_range} (high = emotional intensity)
-- Speech Rate: ${audioFeatures.speech_rate} (fast = excited/angry, slow = sad/neutral)
-- Zero Crossing Rate: ${audioFeatures.zero_crossing_rate} (high = energetic speech)
-- Emotional Intensity: ${audioFeatures.emotional_intensity} (overall emotional energy)
-- Frequency Distribution: High=${audioFeatures.high_freq}%, Mid=${audioFeatures.mid_freq}%, Low=${audioFeatures.low_freq}%
+**VOICE ACOUSTIC ANALYSIS:**
+- **Fundamental Frequency**: ${audioFeatures.fundamental_freq}Hz (high pitch=fear/excitement, low pitch=sadness/anger)
+- **Pitch Variance**: ${audioFeatures.pitch_variance}Hz (high variance=emotional intensity, low=controlled)
+- **Pitch Range**: ${audioFeatures.pitch_range}Hz (wide range=excitement/anger, narrow=neutral/sad)
+- **Jitter**: ${audioFeatures.jitter} (high jitter=fear/nervousness, low=calm)
+- **Shimmer**: ${audioFeatures.shimmer} (high shimmer=emotional arousal, low=stable)
+- **Spectral Centroid**: ${audioFeatures.spectral_centroid}Hz (high=bright/happy, low=dark/sad)
+- **Formants F1/F2/F3**: ${audioFeatures.formant_f1}/${audioFeatures.formant_f2}/${audioFeatures.formant_f3}Hz (vocal tract position)
+- **Voice Quality**: HNR=${audioFeatures.hnr}, Breathiness=${audioFeatures.breathiness}, Tremor=${audioFeatures.voice_tremor}
+- **Energy**: RMS=${audioFeatures.rms}, Loudness=${audioFeatures.loudness_db}dB, Dynamics=${audioFeatures.energy_dynamics}
+- **Temporal**: Speech Rate=${audioFeatures.speech_rate}wpm, Pauses=${audioFeatures.pause_ratio}%
 
-**AUDIO-EMOTION CORRELATIONS:**
-- **Happy**: Moderate-high loudness (50-70%), low silence (<20%), high speech rate, balanced frequencies
-- **Sad**: Low loudness (<40%), high silence (>30%), low speech rate, more low frequencies
-- **Angry**: High loudness (>70%), low silence (<15%), high dynamic range, more high frequencies
-- **Fear**: Variable loudness, moderate silence, irregular speech rate, scattered frequencies
-- **Surprise**: Sudden loudness changes, low silence, high zero crossing, balanced frequencies
-- **Neutral**: Moderate loudness (40-60%), balanced silence, steady speech rate, even frequencies
+**VOICE-BASED EMOTION PATTERNS:**
+- **HAPPY**: Higher fundamental freq (180-220Hz), moderate jitter (0.01-0.02), bright spectral centroid (>2000Hz), increased shimmer, steady rhythm with minimal pauses
+- **SAD**: Lower fundamental freq (100-140Hz), narrow pitch range, low spectral centroid (<1500Hz), increased pause ratio, breathy voice quality
+- **ANGRY**: High fundamental freq (200-280Hz), wide pitch range, high jitter/shimmer, increased spectral bandwidth, high energy dynamics
+- **FEAR**: Very high fundamental freq (250-350Hz), extremely high jitter, irregular pitch contour, breathy with tremor, fragmented speech
+- **SURPRISE**: Sudden pitch jump, high spectral centroid, brief duration, increased shimmer, minimal pauses
+- **NEUTRAL**: Stable fundamental freq (150-180Hz), low jitter/shimmer, balanced spectral features, steady rhythm
 
-**TEXT ANALYSIS REQUIREMENTS:**
-1. **Linguistic patterns**: word choice, sentence structure, punctuation analysis
-2. **Emotional intensity**: strength and clarity of emotional expressions
-3. **Context clues**: situational and relational emotional context
-4. **Prosodic indicators**: implied vocal tone from text structure
-5. **Temporal aspects**: immediate vs. reflective emotional states
+**ANALYSIS PRIORITY:**
+1. **PRIMARY**: Voice pitch and tone characteristics (70% weight)
+2. **SECONDARY**: Spectral and voice quality features (20% weight) 
+3. **TERTIARY**: Text content only for context (10% weight)
 
-**EMOTION DEFINITIONS WITH AUDIO CORRELATIONS:**
-- **happy**: joy, excitement, satisfaction, contentment, enthusiasm (audio: upbeat, energetic)
-- **sad**: grief, disappointment, loneliness, melancholy, sorrow (audio: slow, low energy)
-- **angry**: frustration, irritation, rage, annoyance, resentment (audio: intense, loud)
-- **fear**: anxiety, worry, panic, dread, nervousness (audio: trembling, irregular)
-- **neutral**: calm, objective, factual, unemotional, balanced (audio: steady, moderate)
-- **surprise**: shock, amazement, astonishment, disbelief, wonder (audio: sudden changes)
-
-**MULTIMODAL ANALYSIS RULES:**
-- Cross-validate text emotions with audio characteristics
-- Weight audio features heavily when text is ambiguous
-- Consider contradictions between text and audio (e.g., "I'm fine" with sad audio)
-- Use audio intensity to confirm or modify text-based confidence
-- Account for cultural and contextual emotional expressions
-- Avoid defaulting to neutral unless both text and audio support it
-
-**PRECISION REQUIREMENTS:**
-- Primary emotion confidence must be >25% when clearly detected
-- Secondary emotions should reflect genuine ambiguity
-- Total must exactly sum to 100%
-- Use decimal precision (0.1) for nuanced emotion distribution
+**CRITICAL RULES:**
+- If voice clearly shows an emotion, IGNORE contradictory text
+- Prioritize acoustic evidence over linguistic patterns
+- Use fundamental frequency and pitch variance as primary indicators
+- Consider formants for vocal quality and emotional state
+- High jitter/shimmer indicates emotional arousal regardless of text
+- Low energy with pauses indicates sadness even if text is positive
 
 Respond ONLY with a JSON object (no markdown, no extra text):
 {
@@ -281,7 +585,7 @@ Respond ONLY with a JSON object (no markdown, no extra text):
   }
 }
 
-Text: "${transcribedText}"`
+Transcribed Text: "${transcribedText}"`
           }
         ],
         model: 'llama-3.3-70b-versatile',
@@ -643,7 +947,6 @@ async function storeEmotionAnalysis(analysis, audioData = null) {
   if (!supabase) return null;
   
   try {
-    const confidence = analysis.data[analysis.primary] || 0;
     const { data, error } = await supabase
       .from('emotion_analyses')
       .insert([
@@ -651,7 +954,6 @@ async function storeEmotionAnalysis(analysis, audioData = null) {
           primary_emotion: analysis.primary,
           emotion_data: analysis.data,
           transcription: analysis.transcription,
-          confidence: confidence,
           audio_size: audioData?.size,
           created_at: new Date().toISOString()
         }
@@ -695,7 +997,21 @@ async function getEmotionHistory(limit = 50) {
 }
 
 // POST /predict - Analyze audio
-app.post('/predict', upload.single('audio'), async (req, res) => {
+app.post('/predict', (req, res, next) => {
+  upload.single('audio')(req, res, function(err) {
+    if (err instanceof multer.MulterError) {
+      console.error('[Multer Error]', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ detail: 'File too large. Maximum size is 50MB.' });
+      }
+      return res.status(400).json({ detail: `Multer error: ${err.message}` });
+    } else if (err) {
+      console.error('[Upload Error]', err);
+      return res.status(400).json({ detail: `Upload error: ${err.message}` });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ detail: 'No audio file provided' });
@@ -762,9 +1078,6 @@ app.post('/predict', upload.single('audio'), async (req, res) => {
     res.status(500).json({ detail: `Error: ${error.message}` });
   }
 });
-
-// In-memory storage for analysis history (for development)
-let analysisHistory = [];
 
 // GET /history - Retrieve emotion analysis history
 app.get('/history', async (req, res) => {

@@ -283,7 +283,17 @@ async function runAnalysis() {
   try {
     let audioBlob = uploadedFile;
     if (!audioBlob && recordedAudioReady && recordedChunks.length > 0) {
+      console.log('Creating audio blob from', recordedChunks.length, 'chunks');
       audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+      console.log('Created blob size:', audioBlob.size, 'bytes');
+    }
+    
+    if (!audioBlob) {
+      throw new Error('No audio data available. Please record or upload an audio file first.');
+    }
+    
+    if (audioBlob.size === 0) {
+      throw new Error('Audio file is empty. Please try recording again.');
     }
 
     const startMs = Date.now();
@@ -318,11 +328,19 @@ async function callEmotionAPI(audioBlob) {
   try {
     const formData = new FormData();
     const fileName = uploadedFile ? uploadedFile.name : 'recording.webm';
+    
+    console.log('FormData - Audio blob size:', audioBlob.size, 'bytes');
+    console.log('FormData - File name:', fileName);
+    console.log('FormData - Blob type:', audioBlob.type);
+    
     formData.append('audio', audioBlob, fileName);
     
-    // Call backend API with timeout for <2 second requirement
+    // Log FormData contents (without logging actual audio data)
+    console.log('FormData created, entries count:', formData.entries.length);
+    
+    // Call backend API with timeout for Groq API processing
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout for Whisper + Llama analysis
     
     const response = await fetch('/predict', {
       method: 'POST',
@@ -333,11 +351,21 @@ async function callEmotionAPI(audioBlob) {
     clearTimeout(timeoutId);
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Backend error: ${error.detail || response.statusText}`);
+      const rawText = await response.text();
+      console.error('❌ Backend error response (raw):', rawText);
+      let errorMsg = response.statusText;
+      try { errorMsg = JSON.parse(rawText).detail || errorMsg; } catch(e) { errorMsg = rawText.slice(0, 200); }
+      throw new Error(`Backend error: ${errorMsg}`);
     }
 
-    const emotionData = await response.json();
+    const rawText = await response.text();
+    let emotionData;
+    try {
+      emotionData = JSON.parse(rawText);
+    } catch(e) {
+      console.error('❌ Failed to parse JSON response:', rawText.slice(0, 500));
+      throw new Error('Server returned invalid JSON. Check console for details.');
+    }
     
     // Validate response structure
     if (!emotionData.primary || !emotionData.data) {
