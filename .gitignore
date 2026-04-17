@@ -6,28 +6,10 @@
 # Dependencies
 node_modules/
 package-lock.json
-yarn.lock
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-
 # Temp files
 temp_audio.*
-
-# Next.js build output
-.next/
-out/
-build/
