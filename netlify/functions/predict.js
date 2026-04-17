@@ -8,6 +8,12 @@ const { createClient } = require('@supabase/supabase-js');
 const serverless = require('serverless-http');
 const app = express();
 
+// Netlify serverless function handler
+const handler = async (event, context) => {
+  const server = serverless(app);
+  return await server(event, context);
+};
+
 // Middleware
 app.use(cors({
   origin: ['http://localhost:3000', 'https://*.netlify.app', 'https://*.vercel.app'],
@@ -360,4 +366,4 @@ app.get('/health', (req, res) => {
 });
 
 // Export as serverless function
-module.exports = serverless(app);
+module.exports = handler;
