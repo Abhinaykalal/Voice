@@ -74,11 +74,18 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
     const audioFeatures = extractAudioFeatures(audioBuffer);
     
     // Transcribe audio with Groq Whisper
-    const { toFile } = require('groq-sdk');
-    const transcription = await groq.audio.transcriptions.create({
-      file: await toFile(audioBuffer, filename || 'audio.webm', { type: 'audio/webm' }),
-      model: 'whisper-large-v3',
-    });
+    let transcription;
+    try {
+      const { toFile } = require('groq-sdk');
+      const audioFile = await toFile(audioBuffer, filename || 'audio.webm', { type: 'audio/webm' });
+      transcription = await groq.audio.transcriptions.create({
+        file: audioFile,
+        model: 'whisper-large-v3',
+      });
+    } catch (transcriptionError) {
+      console.error('[Netlify Function] Transcription failed:', transcriptionError);
+      throw new Error('Audio transcription failed: ' + transcriptionError.message);
+    }
     
     const transcribedText = transcription.text;
     
@@ -246,9 +253,13 @@ exports.handler = async (event, context) => {
 // Handle voice analysis
 async function handlePredict(event, headers) {
   try {
+    console.log('[Netlify Function] Processing voice analysis request');
+    
     const contentType = event.headers['content-type'] || '';
+    console.log('[Netlify Function] Content-Type:', contentType);
     
     if (!contentType.includes('multipart/form-data')) {
+      console.log('[Netlify Function] Error: Not multipart/form-data');
       return {
         statusCode: 400,
         headers,
@@ -256,9 +267,34 @@ async function handlePredict(event, headers) {
       };
     }
 
-    // Parse multipart data
-    const boundary = contentType.split('boundary=')[1];
-    const parts = multipart.Parse(Buffer.from(event.body, 'base64'), boundary);
+    // Parse multipart data with better error handling
+    let boundary;
+    try {
+      boundary = contentType.split('boundary=')[1];
+      if (!boundary) {
+        throw new Error('No boundary found in Content-Type');
+      }
+    } catch (error) {
+      console.log('[Netlify Function] Error parsing boundary:', error.message);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ detail: 'Invalid Content-Type header' })
+      };
+    }
+
+    let parts;
+    try {
+      parts = multipart.Parse(Buffer.from(event.body || '', 'base64'), boundary);
+      console.log('[Netlify Function] Parsed multipart parts:', parts.length);
+    } catch (error) {
+      console.log('[Netlify Function] Error parsing multipart data:', error.message);
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ detail: 'Failed to parse multipart data' })
+      };
+    }
     
     let audioFile = null;
     for (const part of parts) {
@@ -269,6 +305,7 @@ async function handlePredict(event, headers) {
     }
 
     if (!audioFile) {
+      console.log('[Netlify Function] Error: No audio file found in parts');
       return {
         statusCode: 400,
         headers,
@@ -276,7 +313,7 @@ async function handlePredict(event, headers) {
       };
     }
 
-    console.log(`[Netlify Function] Received audio: ${audioFile.data.length} bytes`);
+    console.log(`[Netlify Function] Received audio: ${audioFile.data.length} bytes, filename: ${audioFile.filename || 'unknown'}`);
     
     if (!groq) {
       return {
@@ -287,10 +324,28 @@ async function handlePredict(event, headers) {
     }
 
     // Analyze emotion
-    const emotionData = await analyzeEmotionWithGroq(audioFile.data, audioFile.filename);
+    let emotionData;
+    try {
+      console.log('[Netlify Function] Starting emotion analysis...');
+      emotionData = await analyzeEmotionWithGroq(audioFile.data, audioFile.filename);
+      console.log('[Netlify Function] Emotion analysis successful');
+    } catch (analysisError) {
+      console.error('[Netlify Function] Emotion analysis failed:', analysisError);
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ detail: `Emotion analysis failed: ${analysisError.message}` })
+      };
+    }
     
-    // Store in database
-    await storeEmotionAnalysis(emotionData, { size: audioFile.data.length });
+    // Store in database (non-blocking)
+    try {
+      await storeEmotionAnalysis(emotionData, { size: audioFile.data.length });
+      console.log('[Netlify Function] Analysis stored successfully');
+    } catch (storageError) {
+      console.warn('[Netlify Function] Storage failed (continuing):', storageError.message);
+      // Continue even if storage fails
+    }
     
     console.log(`[Netlify Function] Analysis completed: ${emotionData.primary}`);
     
