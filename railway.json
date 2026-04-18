@@ -3,7 +3,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "cd backend && npm start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
@@ -11,7 +11,7 @@
   },
   "services": {
     "voice-emotion-api": {
-      "sourceDir": "/backend",
+      "sourceDir": "/",
       "healthCheckPath": "/api/health"
     }
   }

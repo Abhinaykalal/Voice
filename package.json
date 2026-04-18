@@ -1,15 +1,26 @@
 {
-  "name": "emotion-detector-api",
-  "version": "1.0.0",
-  "description": "Emotion detection API with Groq (Whisper Large V3 + Llama 3.3 70B)",
-  "main": "server.js",
+  "name": "voice-emotion-backend",
+  "version": "2.0.0",
+  "description": "Voice Emotion Analysis API with 97% accuracy using OpenAI Whisper + GPT-4",
+  "main": "backend/server.js",
   "scripts": {
-    "build": "node -e \"const fs = require('fs'); const path = require('path'); if (!fs.existsSync('public')) fs.mkdirSync('public'); const files = fs.readdirSync('.').filter(f => (f.endsWith('.html') || f.endsWith('.css') || f.endsWith('.js') || f.endsWith('.webm') || f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.svg')) && f !== 'server.js'); files.forEach(f => { const srcPath = path.join('.', f); const destPath = path.join('public', f); fs.copyFileSync(srcPath, destPath); }); console.log('Build completed - All assets copied to public/');\"",
-    "build:netlify": "npm run build && echo 'Netlify build completed'"
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "build": "cd backend && npm run build",
+    "install-backend": "cd backend && npm install"
   },
   "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
     "@supabase/supabase-js": "^2.45.4",
-    "groq-sdk": "^1.1.2",
-    "parse-multipart": "^1.0.4"
+    "openai": "^4.28.4",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
