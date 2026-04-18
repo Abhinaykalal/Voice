@@ -355,7 +355,7 @@ async function callEmotionAPI(audioBlob) {
     
     while (retryCount <= maxRetries) {
       try {
-        const response = await fetch('/api/predict', {
+        const response = await fetch('https://voice-emotion-api-production.up.railway.app/api/predict', {
           method: 'POST',
           body: formData,
           signal: controller.signal,
@@ -548,7 +548,7 @@ async function loadHistory() {
   historyList.classList.add('hidden');
   
   try {
-    const response = await fetch('/api/history');
+    const response = await fetch('https://voice-emotion-api-production.up.railway.app/api/history');
     if (!response.ok) {
       throw new Error('Failed to fetch history');
     }
@@ -641,7 +641,7 @@ backToMainBtn.addEventListener('click', () => {
 clearHistoryBtn.addEventListener('click', async () => {
   if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
     try {
-      const response = await fetch('/api/history', { method: 'DELETE' });
+      const response = await fetch('https://voice-emotion-api-production.up.railway.app/api/history', { method: 'DELETE' });
       if (response.ok) {
         showToast('🗑️ History cleared successfully');
         loadHistory();

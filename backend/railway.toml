@@ -1,0 +1,18 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "voice-emotion-api"
+sourceDir = "/"
+healthCheckPath = "/api/health"
+
+[variables]
+NODE_ENV = "production"
+PORT = "3000"
