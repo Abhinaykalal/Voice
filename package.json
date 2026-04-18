@@ -1,13 +1,17 @@
 {
-  "name": "voice-emotion-frontend",
+  "name": "voice-emotion-analysis",
   "version": "2.0.0",
-  "description": "Voice Emotion Analysis Frontend - Static Site",
+  "description": "Voice Emotion Analysis with Fallback Netlify Functions",
   "main": "index.html",
   "scripts": {
     "build": "echo 'Frontend build completed - Static files ready'",
     "dev": "echo 'Dev server ready - Static files'"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "groq-sdk": "^1.1.2",
+    "parse-multipart": "^1.0.4"
+  },
   "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
@@ -17,6 +21,6 @@
     "emotion",
     "analysis",
     "frontend",
-    "static"
+    "serverless"
   ]
 }

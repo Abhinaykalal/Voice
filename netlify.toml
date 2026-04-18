@@ -6,9 +6,17 @@
   NODE_VERSION = "18"
 
 [[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+[functions]
+  directory = "netlify/functions"
 
 [dev]
   command = "echo 'Dev server ready'"
