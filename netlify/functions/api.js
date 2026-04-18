@@ -2,12 +2,12 @@ const Groq = require('groq-sdk');
 const { createClient } = require('@supabase/supabase-js');
 const multipart = require('parse-multipart');
 
-// Initialize APIs
+// Initialize Groq API
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const USE_GROQ = process.env.USE_GROQ === 'true';
 
 let groq = null;
-if (USE_GROQ && GROQ_API_KEY) {
+if (USE_GROQ && GROQ_API_KEY && GROQ_API_KEY !== 'your_groq_api_key_here') {
   try {
     groq = new Groq({ apiKey: GROQ_API_KEY });
     console.log('✅ Groq API initialized');
@@ -16,7 +16,7 @@ if (USE_GROQ && GROQ_API_KEY) {
   }
 }
 
-// Supabase Setup
+// Initialize Supabase
 const USE_SUPABASE = process.env.USE_SUPABASE === 'true';
 let supabase = null;
 
@@ -24,13 +24,13 @@ if (USE_SUPABASE) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
   
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_URL !== 'your_supabase_project_url') {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     console.log('✅ Supabase initialized');
   }
 }
 
-// Helper function to extract audio features
+// Extract audio features
 function extractAudioFeatures(audioBuffer) {
   return {
     fundamental_freq: 150,
@@ -62,19 +62,18 @@ function extractAudioFeatures(audioBuffer) {
   };
 }
 
-// Analyze emotion with Groq API
+// Analyze emotion with Groq
 async function analyzeEmotionWithGroq(audioBuffer, filename) {
   if (!groq) {
-    throw new Error('Groq API not initialized');
+    throw new Error('Groq API not configured');
   }
 
   try {
     console.log('🎵 Starting emotion analysis...');
     
-    // Extract audio features
     const audioFeatures = extractAudioFeatures(audioBuffer);
     
-    // Transcribe audio with Groq Whisper
+    // Transcribe with Whisper
     let transcription;
     try {
       const { toFile } = require('groq-sdk');
@@ -84,28 +83,19 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
         model: 'whisper-large-v3',
       });
       console.log('📝 Transcription successful');
-    } catch (transcriptionError) {
-      console.error('❌ Transcription failed:', transcriptionError.message);
-      throw new Error('Audio transcription failed: ' + transcriptionError.message);
+    } catch (error) {
+      console.error('❌ Transcription failed:', error.message);
+      throw new Error('Transcription failed: ' + error.message);
     }
     
-    const transcribedText = transcription.text;
-    
     // Analyze emotions with Llama
-    const prompt = `Analyze emotional content of this speech based on voice characteristics:
+    const prompt = `Analyze emotions in this speech:
 
-Audio Features:
-- Pitch: ${audioFeatures.fundamental_freq}Hz
-- Pitch Variation: ${audioFeatures.pitch_variance}
-- Energy: ${audioFeatures.loudness_db}dB
-- Speech Rate: ${audioFeatures.speech_rate} words/min
-- Voice Quality: Jitter=${audioFeatures.jitter}, Shimmer=${audioFeatures.shimmer}
+Transcribed text: "${transcription.text}"
 
-Transcribed Text: "${transcribedText}"
+Return emotion percentages for: happy, sad, angry, fear, neutral, surprise.
 
-Provide emotion analysis with percentages for: happy, sad, angry, fear, neutral, surprise.
-
-Format your response as valid JSON:
+Return JSON:
 {
   "primary": "emotion_name",
   "data": {
@@ -123,33 +113,26 @@ Format your response as valid JSON:
       messages: [
         {
           role: 'system',
-          content: 'You are an expert voice emotion analyst. Analyze speech patterns and provide accurate emotion breakdowns.'
+          content: 'You are an emotion analysis expert. Analyze speech and return emotion percentages in valid JSON format.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      max_tokens: 500,
-      temperature: 0.3
+      max_tokens: 300,
+      temperature: 0.2
     });
 
-    const emotionText = response.choices[0].message.content;
     let emotionData;
-    
     try {
-      emotionData = JSON.parse(emotionText);
-    } catch (parseError) {
-      console.warn('⚠️ JSON parsing failed, using fallback');
+      emotionData = JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+      console.warn('⚠️ JSON parse failed, using fallback');
       emotionData = {
         primary: 'neutral',
         data: {
-          happy: 20,
-          sad: 20,
-          angry: 20,
-          fear: 10,
-          neutral: 20,
-          surprise: 10
+          happy: 20, sad: 20, angry: 20, fear: 10, neutral: 20, surprise: 10
         }
       };
     }
@@ -157,20 +140,20 @@ Format your response as valid JSON:
     return {
       primary: emotionData.primary,
       data: emotionData.data,
-      transcription: transcribedText,
+      transcription: transcription.text,
       audio_features: audioFeatures
     };
     
   } catch (error) {
-    console.error('❌ Groq API error:', error);
-    throw new Error('Emotion analysis failed: ' + error.message);
+    console.error('❌ Groq API error:', error.message);
+    throw new Error('Analysis failed: ' + error.message);
   }
 }
 
-// Store emotion analysis in Supabase
+// Store in Supabase
 async function storeEmotionAnalysis(emotionData, metadata) {
   if (!supabase) {
-    console.log('ℹ️ Supabase not configured, skipping storage');
+    console.log('ℹ️ Supabase not configured');
     return;
   }
 
@@ -187,70 +170,67 @@ async function storeEmotionAnalysis(emotionData, metadata) {
       });
 
     if (error) {
-      console.error('❌ Supabase error:', error);
-      throw error;
+      console.error('❌ Storage error:', error.message);
+    } else {
+      console.log('✅ Stored successfully');
     }
-    console.log('✅ Analysis stored successfully');
   } catch (error) {
-    console.error('❌ Failed to store analysis:', error);
+    console.error('❌ Storage failed:', error.message);
   }
 }
 
-// Main handler function
+// Main handler
 exports.handler = async (event, context) => {
   console.log('🚀 Function invoked:', event.httpMethod, event.path);
   
-  // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Content-Type': 'application/json'
   };
 
-  // Handle OPTIONS request for CORS
+  // Handle OPTIONS
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers, body: '' };
   }
 
   try {
     const { httpMethod, path, body, queryStringParameters } = event;
     
-    console.log(`📡 ${httpMethod} ${path}`);
-
-    // Handle different routes
+    // Routes
     if (httpMethod === 'POST' && path === '/api/predict') {
       return await handlePredict(event, headers);
-    } else if (httpMethod === 'GET' && path === '/api/history') {
+    }
+    
+    if (httpMethod === 'GET' && path === '/api/history') {
       return await handleHistory(queryStringParameters, headers);
-    } else if (httpMethod === 'DELETE' && path === '/api/history') {
+    }
+    
+    if (httpMethod === 'DELETE' && path === '/api/history') {
       return await handleClearHistory(headers);
-    } else if (httpMethod === 'GET' && path === '/api/health') {
+    }
+    
+    if (httpMethod === 'GET' && path === '/api/health') {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ 
-          status: 'ok', 
-          message: 'Emotion Detector API is running on Netlify' 
-        })
-      };
-    } else {
-      return {
-        statusCode: 404,
-        headers,
-        body: JSON.stringify({ detail: 'Endpoint not found' })
+        body: JSON.stringify({ status: 'ok', message: 'API is running' })
       };
     }
+    
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ detail: 'Endpoint not found' })
+    };
+    
   } catch (error) {
-    console.error('❌ Function error:', error);
+    console.error('❌ Function error:', error.message);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ detail: `Error: ${error.message}` })
+      body: JSON.stringify({ detail: error.message })
     };
   }
 };
@@ -258,13 +238,10 @@ exports.handler = async (event, context) => {
 // Handle voice analysis
 async function handlePredict(event, headers) {
   try {
-    console.log('🎤 Processing voice analysis request');
+    console.log('🎤 Processing voice analysis');
     
     const contentType = event.headers['content-type'] || '';
-    console.log('📋 Content-Type:', contentType);
-    
     if (!contentType.includes('multipart/form-data')) {
-      console.log('❌ Error: Not multipart/form-data');
       return {
         statusCode: 400,
         headers,
@@ -272,38 +249,35 @@ async function handlePredict(event, headers) {
       };
     }
 
-    // Parse multipart data with robust error handling
-    let boundary;
-    try {
-      boundary = contentType.split('boundary=')[1];
-      if (!boundary) {
-        throw new Error('No boundary found in Content-Type');
-      }
-    } catch (error) {
-      console.log('❌ Error parsing boundary:', error.message);
+    if (!event.body) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ detail: 'Invalid Content-Type header' })
+        body: JSON.stringify({ detail: 'No request body' })
+      };
+    }
+
+    const boundary = contentType.split('boundary=')[1];
+    if (!boundary) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ detail: 'Invalid Content-Type' })
       };
     }
 
     let parts;
     try {
-      if (!event.body) {
-        throw new Error('No request body found');
-      }
       parts = multipart.Parse(Buffer.from(event.body, 'base64'), boundary);
-      console.log(`📦 Parsed ${parts.length} multipart parts`);
+      console.log(`📦 Parsed ${parts.length} parts`);
     } catch (error) {
-      console.log('❌ Error parsing multipart data:', error.message);
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ detail: 'Failed to parse multipart data: ' + error.message })
+        body: JSON.stringify({ detail: 'Failed to parse form data' })
       };
     }
-    
+
     let audioFile = null;
     for (const part of parts) {
       if (part.name === 'audio') {
@@ -313,7 +287,6 @@ async function handlePredict(event, headers) {
     }
 
     if (!audioFile) {
-      console.log('❌ Error: No audio file found in parts');
       return {
         statusCode: 400,
         headers,
@@ -321,42 +294,14 @@ async function handlePredict(event, headers) {
       };
     }
 
-    console.log(`🎵 Received audio: ${audioFile.data.length} bytes, filename: ${audioFile.filename || 'unknown'}`);
+    console.log(`🎵 Received ${audioFile.data.length} bytes`);
     
-    if (!groq) {
-      console.log('❌ Groq API not configured');
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ detail: 'Groq API not configured' })
-      };
-    }
-
-    // Analyze emotion
-    let emotionData;
-    try {
-      console.log('🧠 Starting emotion analysis...');
-      emotionData = await analyzeEmotionWithGroq(audioFile.data, audioFile.filename);
-      console.log('✅ Emotion analysis successful');
-    } catch (analysisError) {
-      console.error('❌ Emotion analysis failed:', analysisError);
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ detail: `Emotion analysis failed: ${analysisError.message}` })
-      };
-    }
+    const emotionData = await analyzeEmotionWithGroq(audioFile.data, audioFile.filename);
     
-    // Store in database (non-blocking)
-    try {
-      await storeEmotionAnalysis(emotionData, { size: audioFile.data.length });
-      console.log('✅ Analysis stored successfully');
-    } catch (storageError) {
-      console.warn('⚠️ Storage failed (continuing):', storageError.message);
-      // Continue even if storage fails
-    }
+    // Store (non-blocking)
+    storeEmotionAnalysis(emotionData, { size: audioFile.data.length });
     
-    console.log(`🎯 Analysis completed: ${emotionData.primary}`);
+    console.log(`✅ Analysis completed: ${emotionData.primary}`);
     
     return {
       statusCode: 200,
@@ -365,16 +310,16 @@ async function handlePredict(event, headers) {
     };
     
   } catch (error) {
-    console.error('❌ Predict error:', error);
+    console.error('❌ Predict error:', error.message);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ detail: `Error: ${error.message}` })
+      body: JSON.stringify({ detail: error.message })
     };
   }
 }
 
-// Handle history retrieval
+// Handle history
 async function handleHistory(queryParams, headers) {
   try {
     const limit = parseInt(queryParams?.limit) || 50;
@@ -383,11 +328,7 @@ async function handleHistory(queryParams, headers) {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ 
-          count: 0,
-          limit,
-          data: [] 
-        })
+        body: JSON.stringify({ count: 0, limit, data: [] })
       };
     }
 
@@ -398,48 +339,40 @@ async function handleHistory(queryParams, headers) {
       .limit(limit);
 
     if (error) {
-      console.error('❌ Failed to fetch history:', error.message);
+      console.error('❌ History error:', error.message);
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ 
-          count: 0,
-          limit,
-          data: [] 
-        })
+        body: JSON.stringify({ count: 0, limit, data: [] })
       };
     }
 
-    console.log(`📚 Retrieved ${data.length} history items`);
+    console.log(`📚 Retrieved ${data.length} items`);
     
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ 
-        count: data.length,
-        limit,
-        data: data || [] 
-      })
+      body: JSON.stringify({ count: data.length, limit, data: data || [] })
     };
     
   } catch (error) {
-    console.error('❌ History error:', error);
+    console.error('❌ History error:', error.message);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ detail: `Error: ${error.message}` })
+      body: JSON.stringify({ detail: error.message })
     };
   }
 }
 
-// Handle history clearing
+// Handle clear history
 async function handleClearHistory(headers) {
   try {
     if (!supabase) {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ message: 'History cleared successfully' })
+        body: JSON.stringify({ message: 'History cleared' })
       };
     }
 
@@ -449,23 +382,23 @@ async function handleClearHistory(headers) {
       .neq('id', 0);
       
     if (error) {
-      console.error('❌ Failed to clear history:', error.message);
+      console.error('❌ Clear error:', error.message);
+    } else {
+      console.log('✅ History cleared');
     }
-    
-    console.log('🗑️ History cleared successfully');
     
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ message: 'History cleared successfully' })
+      body: JSON.stringify({ message: 'History cleared' })
     };
     
   } catch (error) {
-    console.error('❌ Clear history error:', error);
+    console.error('❌ Clear error:', error.message);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ detail: `Error: ${error.message}` })
+      body: JSON.stringify({ detail: error.message })
     };
   }
 }
