@@ -1,7 +1,6 @@
 const Groq = require('groq-sdk');
 const { createClient } = require('@supabase/supabase-js');
 const multipart = require('parse-multipart');
-const crypto = require('crypto');
 
 // Initialize APIs
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -11,9 +10,9 @@ let groq = null;
 if (USE_GROQ && GROQ_API_KEY) {
   try {
     groq = new Groq({ apiKey: GROQ_API_KEY });
-    console.log('Groq API initialized');
+    console.log('✅ Groq API initialized');
   } catch (error) {
-    console.error('Failed to initialize Groq API:', error.message);
+    console.error('❌ Failed to initialize Groq API:', error.message);
   }
 }
 
@@ -27,7 +26,7 @@ if (USE_SUPABASE) {
   
   if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('Supabase initialized');
+    console.log('✅ Supabase initialized');
   }
 }
 
@@ -70,6 +69,8 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
   }
 
   try {
+    console.log('🎵 Starting emotion analysis...');
+    
     // Extract audio features
     const audioFeatures = extractAudioFeatures(audioBuffer);
     
@@ -82,15 +83,16 @@ async function analyzeEmotionWithGroq(audioBuffer, filename) {
         file: audioFile,
         model: 'whisper-large-v3',
       });
+      console.log('📝 Transcription successful');
     } catch (transcriptionError) {
-      console.error('[Netlify Function] Transcription failed:', transcriptionError);
+      console.error('❌ Transcription failed:', transcriptionError.message);
       throw new Error('Audio transcription failed: ' + transcriptionError.message);
     }
     
     const transcribedText = transcription.text;
     
     // Analyze emotions with Llama
-    const prompt = `Analyze the emotional content of this speech based on voice characteristics:
+    const prompt = `Analyze emotional content of this speech based on voice characteristics:
 
 Audio Features:
 - Pitch: ${audioFeatures.fundamental_freq}Hz
@@ -138,7 +140,7 @@ Format your response as valid JSON:
     try {
       emotionData = JSON.parse(emotionText);
     } catch (parseError) {
-      // Fallback if JSON parsing fails
+      console.warn('⚠️ JSON parsing failed, using fallback');
       emotionData = {
         primary: 'neutral',
         data: {
@@ -160,7 +162,7 @@ Format your response as valid JSON:
     };
     
   } catch (error) {
-    console.error('Groq API error:', error);
+    console.error('❌ Groq API error:', error);
     throw new Error('Emotion analysis failed: ' + error.message);
   }
 }
@@ -168,7 +170,7 @@ Format your response as valid JSON:
 // Store emotion analysis in Supabase
 async function storeEmotionAnalysis(emotionData, metadata) {
   if (!supabase) {
-    console.log('Supabase not configured, skipping storage');
+    console.log('ℹ️ Supabase not configured, skipping storage');
     return;
   }
 
@@ -185,16 +187,19 @@ async function storeEmotionAnalysis(emotionData, metadata) {
       });
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('❌ Supabase error:', error);
       throw error;
     }
+    console.log('✅ Analysis stored successfully');
   } catch (error) {
-    console.error('Failed to store analysis:', error);
+    console.error('❌ Failed to store analysis:', error);
   }
 }
 
 // Main handler function
 exports.handler = async (event, context) => {
+  console.log('🚀 Function invoked:', event.httpMethod, event.path);
+  
   // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -215,7 +220,7 @@ exports.handler = async (event, context) => {
   try {
     const { httpMethod, path, body, queryStringParameters } = event;
     
-    console.log(`[Netlify Function] ${httpMethod} ${path}`);
+    console.log(`📡 ${httpMethod} ${path}`);
 
     // Handle different routes
     if (httpMethod === 'POST' && path === '/api/predict') {
@@ -241,7 +246,7 @@ exports.handler = async (event, context) => {
       };
     }
   } catch (error) {
-    console.error('[Netlify Function] Error:', error);
+    console.error('❌ Function error:', error);
     return {
       statusCode: 500,
       headers,
@@ -253,13 +258,13 @@ exports.handler = async (event, context) => {
 // Handle voice analysis
 async function handlePredict(event, headers) {
   try {
-    console.log('[Netlify Function] Processing voice analysis request');
+    console.log('🎤 Processing voice analysis request');
     
     const contentType = event.headers['content-type'] || '';
-    console.log('[Netlify Function] Content-Type:', contentType);
+    console.log('📋 Content-Type:', contentType);
     
     if (!contentType.includes('multipart/form-data')) {
-      console.log('[Netlify Function] Error: Not multipart/form-data');
+      console.log('❌ Error: Not multipart/form-data');
       return {
         statusCode: 400,
         headers,
@@ -267,7 +272,7 @@ async function handlePredict(event, headers) {
       };
     }
 
-    // Parse multipart data with better error handling
+    // Parse multipart data with robust error handling
     let boundary;
     try {
       boundary = contentType.split('boundary=')[1];
@@ -275,7 +280,7 @@ async function handlePredict(event, headers) {
         throw new Error('No boundary found in Content-Type');
       }
     } catch (error) {
-      console.log('[Netlify Function] Error parsing boundary:', error.message);
+      console.log('❌ Error parsing boundary:', error.message);
       return {
         statusCode: 400,
         headers,
@@ -285,14 +290,17 @@ async function handlePredict(event, headers) {
 
     let parts;
     try {
-      parts = multipart.Parse(Buffer.from(event.body || '', 'base64'), boundary);
-      console.log('[Netlify Function] Parsed multipart parts:', parts.length);
+      if (!event.body) {
+        throw new Error('No request body found');
+      }
+      parts = multipart.Parse(Buffer.from(event.body, 'base64'), boundary);
+      console.log(`📦 Parsed ${parts.length} multipart parts`);
     } catch (error) {
-      console.log('[Netlify Function] Error parsing multipart data:', error.message);
+      console.log('❌ Error parsing multipart data:', error.message);
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ detail: 'Failed to parse multipart data' })
+        body: JSON.stringify({ detail: 'Failed to parse multipart data: ' + error.message })
       };
     }
     
@@ -305,7 +313,7 @@ async function handlePredict(event, headers) {
     }
 
     if (!audioFile) {
-      console.log('[Netlify Function] Error: No audio file found in parts');
+      console.log('❌ Error: No audio file found in parts');
       return {
         statusCode: 400,
         headers,
@@ -313,9 +321,10 @@ async function handlePredict(event, headers) {
       };
     }
 
-    console.log(`[Netlify Function] Received audio: ${audioFile.data.length} bytes, filename: ${audioFile.filename || 'unknown'}`);
+    console.log(`🎵 Received audio: ${audioFile.data.length} bytes, filename: ${audioFile.filename || 'unknown'}`);
     
     if (!groq) {
+      console.log('❌ Groq API not configured');
       return {
         statusCode: 500,
         headers,
@@ -326,11 +335,11 @@ async function handlePredict(event, headers) {
     // Analyze emotion
     let emotionData;
     try {
-      console.log('[Netlify Function] Starting emotion analysis...');
+      console.log('🧠 Starting emotion analysis...');
       emotionData = await analyzeEmotionWithGroq(audioFile.data, audioFile.filename);
-      console.log('[Netlify Function] Emotion analysis successful');
+      console.log('✅ Emotion analysis successful');
     } catch (analysisError) {
-      console.error('[Netlify Function] Emotion analysis failed:', analysisError);
+      console.error('❌ Emotion analysis failed:', analysisError);
       return {
         statusCode: 500,
         headers,
@@ -341,13 +350,13 @@ async function handlePredict(event, headers) {
     // Store in database (non-blocking)
     try {
       await storeEmotionAnalysis(emotionData, { size: audioFile.data.length });
-      console.log('[Netlify Function] Analysis stored successfully');
+      console.log('✅ Analysis stored successfully');
     } catch (storageError) {
-      console.warn('[Netlify Function] Storage failed (continuing):', storageError.message);
+      console.warn('⚠️ Storage failed (continuing):', storageError.message);
       // Continue even if storage fails
     }
     
-    console.log(`[Netlify Function] Analysis completed: ${emotionData.primary}`);
+    console.log(`🎯 Analysis completed: ${emotionData.primary}`);
     
     return {
       statusCode: 200,
@@ -356,7 +365,7 @@ async function handlePredict(event, headers) {
     };
     
   } catch (error) {
-    console.error('[Netlify Function] Predict error:', error);
+    console.error('❌ Predict error:', error);
     return {
       statusCode: 500,
       headers,
@@ -389,7 +398,7 @@ async function handleHistory(queryParams, headers) {
       .limit(limit);
 
     if (error) {
-      console.error('Failed to fetch history:', error.message);
+      console.error('❌ Failed to fetch history:', error.message);
       return {
         statusCode: 200,
         headers,
@@ -401,6 +410,8 @@ async function handleHistory(queryParams, headers) {
       };
     }
 
+    console.log(`📚 Retrieved ${data.length} history items`);
+    
     return {
       statusCode: 200,
       headers,
@@ -412,7 +423,7 @@ async function handleHistory(queryParams, headers) {
     };
     
   } catch (error) {
-    console.error('[Netlify Function] History error:', error);
+    console.error('❌ History error:', error);
     return {
       statusCode: 500,
       headers,
@@ -438,8 +449,10 @@ async function handleClearHistory(headers) {
       .neq('id', 0);
       
     if (error) {
-      console.error('Failed to clear history:', error.message);
+      console.error('❌ Failed to clear history:', error.message);
     }
+    
+    console.log('🗑️ History cleared successfully');
     
     return {
       statusCode: 200,
@@ -448,7 +461,7 @@ async function handleClearHistory(headers) {
     };
     
   } catch (error) {
-    console.error('[Netlify Function] Clear history error:', error);
+    console.error('❌ Clear history error:', error);
     return {
       statusCode: 500,
       headers,
