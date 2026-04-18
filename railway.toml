@@ -1,8 +1,9 @@
 [build]
 builder = "NIXPACKS"
+buildCommand = "cd backend && npm install"
 
 [deploy]
-startCommand = "cd backend && npm start"
+startCommand = "cd backend && node server.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 restartPolicyType = "ON_FAILURE"
@@ -16,3 +17,5 @@ healthCheckPath = "/api/health"
 [variables]
 NODE_ENV = "production"
 PORT = "3000"
+GROQ_API_KEY = "your_groq_api_key_here"
+USE_GROQ = "true"
