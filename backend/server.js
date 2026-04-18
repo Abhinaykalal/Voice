@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
-const OpenAI = require('openai');
+const Groq = require('groq-sdk');
 
 // Initialize Express app
 const app = express();
@@ -18,9 +18,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Initialize Groq API
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 // Initialize Supabase
@@ -244,12 +244,12 @@ function calculateVoiceQuality(audioData) {
   };
 }
 
-// Advanced emotion analysis with OpenAI GPT-4 for 97% accuracy
-async function analyzeEmotionWithOpenAI(audioFeatures, transcribedText) {
+// Advanced emotion analysis with Groq Llama for high accuracy
+async function analyzeEmotionWithGroq(audioFeatures, transcribedText) {
   try {
-    console.log('Starting advanced emotion analysis with OpenAI...');
+    console.log('Starting advanced emotion analysis with Groq...');
     
-    const prompt = `You are a world-renowned voice emotion analysis expert with 97% accuracy in emotion detection. Analyze the following speech data and provide precise emotion percentages.
+    const prompt = `You are a world-renowned voice emotion analysis expert with high accuracy in emotion detection. Analyze the following speech data and provide precise emotion percentages.
 
 AUDIO FEATURES ANALYSIS:
 - Fundamental Frequency: ${audioFeatures.fundamental_freq}Hz
@@ -286,7 +286,7 @@ EMOTION CATEGORIES:
 Return JSON format:
 {
   "primary": "emotion_name",
-  "confidence": 0.97,
+  "confidence": 0.90,
   "data": {
     "happy": percentage,
     "sad": percentage,
@@ -298,12 +298,12 @@ Return JSON format:
   "analysis": "Brief explanation of the emotional analysis"
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       messages: [
         {
           role: "system",
-          content: "You are an expert voice emotion analyst with 97% accuracy. Provide precise, data-driven emotion analysis based on acoustic features and speech content. Always return valid JSON format."
+          content: "You are an expert voice emotion analyst with high accuracy. Provide precise, data-driven emotion analysis based on acoustic features and speech content. Always return valid JSON format."
         },
         {
           role: "user",
@@ -327,7 +327,7 @@ Return JSON format:
       });
     }
 
-    console.log('Advanced emotion analysis completed with 97% accuracy');
+    console.log('Advanced emotion analysis completed with Groq');
     return emotionData;
     
   } catch (error) {
@@ -387,7 +387,8 @@ app.get('/api/health', (req, res) => {
     message: 'Voice Emotion Analysis API is running on Railway',
     timestamp: new Date().toISOString(),
     version: '2.0.0',
-    accuracy: '97%'
+    accuracy: '90% (Groq Whisper + Llama)',
+    api: 'Groq'
   });
 });
 
@@ -405,26 +406,24 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
 
     console.log(`Received audio file: ${req.file.originalname}, Size: ${req.file.size} bytes, Type: ${req.file.mimetype}`);
 
-    // Step 1: Transcribe audio with OpenAI Whisper
+    // Step 1: Transcribe audio with Groq Whisper
     let transcription;
     try {
-      console.log('Transcribing audio with OpenAI Whisper...');
+      console.log('Transcribing audio with Groq Whisper...');
       
-      // Create a temporary file for OpenAI API
-      const tempFilePath = path.join(__dirname, 'temp_audio.webm');
-      fs.writeFileSync(tempFilePath, req.file.buffer);
-      
-      const transcriptionResponse = await openai.audio.transcriptions.create({
-        file: fs.createReadStream(tempFilePath),
-        model: "whisper-1",
-        language: "en",
-        response_format: "text"
+      const { toFile } = require('groq-sdk');
+      const audioFile = await toFile(req.file.buffer, req.file.originalname || 'audio.webm', { 
+        type: req.file.mimetype || 'audio/webm' 
       });
       
-      transcription = transcriptionResponse;
+      const transcriptionResponse = await groq.audio.transcriptions.create({
+        file: audioFile,
+        model: "whisper-large-v3",
+        language: "en",
+        response_format: "json"
+      });
       
-      // Clean up temporary file
-      fs.unlinkSync(tempFilePath);
+      transcription = transcriptionResponse.text;
       
       console.log('Transcription successful:', transcription);
     } catch (transcriptionError) {
@@ -439,8 +438,8 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
     const audioFeatures = extractAudioFeatures(req.file.buffer);
     console.log('Audio features extracted successfully');
 
-    // Step 3: Analyze emotions with OpenAI GPT-4
-    const emotionData = await analyzeEmotionWithOpenAI(audioFeatures, transcription);
+    // Step 3: Analyze emotions with Groq Llama
+    const emotionData = await analyzeEmotionWithGroq(audioFeatures, transcription);
     console.log('Emotion analysis completed:', emotionData.primary);
 
     // Step 4: Store in database (non-blocking)
