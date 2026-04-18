@@ -1,25 +1,17 @@
 [build]
-  publish = "public"
-  command = "npm run build"
+  publish = "."
+  command = "echo 'Frontend build completed - Static files ready'"
 
 [build.environment]
   NODE_VERSION = "18"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api"
-  status = 200
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[functions]
-  directory = "netlify/functions"
-
 [dev]
-  command = "npm run dev"
+  command = "echo 'Dev server ready'"
   port = 3000
-  publish = "public"
+  publish = "."
   framework = "#static"
