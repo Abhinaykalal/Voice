@@ -340,9 +340,7 @@ async function callEmotionAPI(audioBlob) {
   }
 
   try {
-    const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:3000' 
-      : 'https://voice-emotion-api-production.up.railway.app';
+    const backendURL = 'http://localhost:3000';
       
     const formData = new FormData();
     formData.append('audio', audioBlob, 'audio.webm');
@@ -735,9 +733,7 @@ async function loadHistory() {
   historyList.classList.add('hidden');
   
   try {
-    const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:3000' 
-      : 'https://voice-emotion-api-production.up.railway.app';
+    const backendURL = 'http://localhost:3000';
       
     const response = await fetch(`${backendURL}/api/history`);
     if (response.ok) {
@@ -841,9 +837,7 @@ backToMainBtn.addEventListener('click', () => {
 clearHistoryBtn.addEventListener('click', async () => {
   if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
     try {
-      const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:3000' 
-        : 'https://voice-emotion-api-production.up.railway.app';
+      const backendURL = 'http://localhost:3000';
       
       try {
         await fetch(`${backendURL}/api/history`, { method: 'DELETE' });
