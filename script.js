@@ -333,6 +333,12 @@ async function callEmotionAPI(audioBlob) {
     throw new Error('No audio data available for analysis');
   }
 
+  // Check if audio contains actual sound (not just silence)
+  const hasAudio = await detectAudioContent(audioBlob);
+  if (!hasAudio) {
+    throw new Error('No audio detected. Please speak clearly during recording.');
+  }
+
   // Client-side fallback analysis for immediate functionality
   console.log('Using client-side emotion analysis (fallback mode)');
   
@@ -453,7 +459,82 @@ async function callEmotionAPI(audioBlob) {
   return result;
 }
 
-/* ── Display Results ──────────────────────────────────────────── */
+/* Audio Content Detection */
+
+async function detectAudioContent(audioBlob) {
+  try {
+    // Check audio blob size - very small blobs might be silent
+    if (audioBlob.size < 1000) { // Less than 1KB is likely silent
+      console.log('Audio blob too small:', audioBlob.size, 'bytes');
+      return false;
+    }
+
+    // Create audio context to analyze the audio data
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    // Get audio data from the first channel
+    const channelData = audioBuffer.getChannelData(0);
+    
+    // Calculate RMS (Root Mean Square) to measure audio level
+    let sum = 0;
+    for (let i = 0; i < channelData.length; i++) {
+      sum += channelData[i] * channelData[i];
+    }
+    const rms = Math.sqrt(sum / channelData.length);
+
+    // Calculate peak amplitude
+    let peak = 0;
+    for (let i = 0; i < channelData.length; i++) {
+      peak = Math.max(peak, Math.abs(channelData[i]));
+    }
+
+    // Calculate zero crossing rate (helps detect silence)
+    let zeroCrossings = 0;
+    for (let i = 1; i < channelData.length; i++) {
+      if ((channelData[i] >= 0 && channelData[i - 1] < 0) || 
+          (channelData[i] < 0 && channelData[i - 1] >= 0)) {
+        zeroCrossings++;
+      }
+    }
+    const zeroCrossingRate = zeroCrossings / channelData.length;
+
+    console.log('Audio analysis:', {
+      rms: rms.toFixed(6),
+      peak: peak.toFixed(6),
+      zeroCrossingRate: zeroCrossingRate.toFixed(6),
+      duration: audioBuffer.duration.toFixed(2),
+      sampleRate: audioBuffer.sampleRate
+    });
+
+    // Thresholds for detecting actual audio
+    const RMS_THRESHOLD = 0.001; // Minimum RMS level
+    const PEAK_THRESHOLD = 0.01;  // Minimum peak amplitude
+    const MIN_DURATION = 0.5;     // Minimum duration in seconds
+
+    // Check if audio meets minimum requirements
+    const hasRms = rms > RMS_THRESHOLD;
+    const hasPeak = peak > PEAK_THRESHOLD;
+    const hasDuration = audioBuffer.duration >= MIN_DURATION;
+
+    console.log('Audio detection results:', {
+      hasRms,
+      hasPeak,
+      hasDuration,
+      overall: hasRms && hasPeak && hasDuration
+    });
+
+    return hasRms && hasPeak && hasDuration;
+
+  } catch (error) {
+    console.error('Error detecting audio content:', error);
+    // If we can't analyze the audio, assume it has content
+    return audioBlob.size > 1000;
+  }
+}
+
+/* Display Results ───────────────────────────────────────────── */
 const circleProgress = document.getElementById('circle-progress');
 const resultEmoji    = document.getElementById('result-emoji');
 const resultLabel    = document.getElementById('result-emotion-label');
