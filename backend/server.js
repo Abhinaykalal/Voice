@@ -104,7 +104,10 @@ async function analyzeEmotionWithHume(audioBuffer, mimeType) {
       status = statusData.state.status;
       
       if (status === 'COMPLETED') {
-        predictionsData = statusData.state.predictions;
+        const resultRes = await fetch(`https://api.hume.ai/v0/batch/jobs/${jobId}/predictions`, {
+          headers: { 'X-Hume-Api-Key': HUME_API_KEY }
+        });
+        predictionsData = await resultRes.json();
       } else if (status === 'FAILED') {
         throw new Error('Hume AI job failed to process audio.');
       }
@@ -112,6 +115,9 @@ async function analyzeEmotionWithHume(audioBuffer, mimeType) {
 
     // Extract Prosody Results
     // Hume returns complex nested JSON. We get the prosody emotions from the first prediction.
+    if (!predictionsData || predictionsData.length === 0) {
+        throw new Error('No predictions returned from Hume');
+    }
     const filePredictions = predictionsData[0].results.predictions[0].models.prosody.grouped_predictions[0].predictions;
     if (!filePredictions || filePredictions.length === 0) {
         throw new Error('No prosody predictions returned from Hume');
