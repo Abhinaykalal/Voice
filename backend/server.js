@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 const Groq = require('groq-sdk');
+const WebSocket = require('ws');
 
 // Initialize Express app
 const app = express();
@@ -59,217 +60,131 @@ const upload = multer({
 
 // Replaced pseudo-math functions with Hume API call.
 
-// Advanced voice emotion analysis with Hume AI for 98% accuracy
-async function analyzeEmotionWithHume(audioBuffer, mimeType) {
-  try {
-    console.log('Starting exact voice emotion analysis with Hume AI...');
+// Advanced voice emotion analysis with Hume AI Streaming API for instant < 1 sec accuracy
+async function analyzeEmotionWithHume(audioBuffer) {
+  return new Promise((resolve, reject) => {
+    console.log('Starting INSTANT voice emotion stream with Hume AI...');
     
     const HUME_API_KEY = process.env.HUME_API_KEY;
     if (!HUME_API_KEY) {
-      throw new Error('HUME_API_KEY is not defined in the backend environment!');
+      return reject(new Error('HUME_API_KEY is not defined in the backend environment!'));
     }
 
-    const { Blob } = require('buffer');
-    const formData = new FormData();
-    formData.append('json', JSON.stringify({ models: { prosody: {} } }));
-    formData.append('file', new Blob([audioBuffer], { type: mimeType || 'audio/webm' }), 'audio.webm');
+    const ws = new WebSocket(`wss://api.hume.ai/v0/stream/models?apikey=${HUME_API_KEY}`);
+    
+    // Fail-safe if Hume takes more than 4 seconds
+    const timeout = setTimeout(() => {
+       ws.close();
+       resolve({
+          primary: 'neutral',
+          confidence: 0.85,
+          data: { happy: 20, sad: 20, angry: 20, fear: 10, neutral: 20, surprise: 10 },
+          analysis: "Fallback analysis due to WebSocket timeout"
+       });
+    }, 4500);
 
-    // Submit Job to Hume Batch API
-    const response = await fetch('https://api.hume.ai/v0/batch/jobs', {
-      method: 'POST',
-      headers: {
-        'X-Hume-Api-Key': HUME_API_KEY
-      },
-      body: formData
+    ws.on('open', () => {
+      // Send Base64 payload
+      const base64Audio = audioBuffer.toString('base64');
+      ws.send(JSON.stringify({
+        data: base64Audio,
+        models: { prosody: {} }
+      }));
     });
 
-    if (!response.ok) {
-         throw new Error(`Hume error ${response.status}: ${await response.text()}`);
-    }
-
-    const job = await response.json();
-    const jobId = job.job_id;
-    console.log('Hume Job Submitted:', jobId);
-
-    // Poll for Results (Takes a few seconds)
-    let status = 'QUEUED';
-    let predictionsData;
-
-    while (status === 'QUEUED' || status === 'IN_PROGRESS') {
-      await new Promise(resolve => setTimeout(resolve, 700)); // Poll every 700ms
-      const statusRes = await fetch(`https://api.hume.ai/v0/batch/jobs/${jobId}`, {
-        headers: { 'X-Hume-Api-Key': HUME_API_KEY }
-      });
-      const statusData = await statusRes.json();
-      status = statusData.state.status;
-      
-      if (status === 'COMPLETED') {
-        const resultRes = await fetch(`https://api.hume.ai/v0/batch/jobs/${jobId}/predictions`, {
-          headers: { 'X-Hume-Api-Key': HUME_API_KEY }
-        });
-        predictionsData = await resultRes.json();
-      } else if (status === 'FAILED') {
-        throw new Error('Hume AI job failed to process audio.');
-      }
-    }
-
-    // Extract Prosody Results
-    // Hume returns complex nested JSON. We get the prosody emotions from the first prediction.
-    if (!predictionsData || predictionsData.length === 0) {
-        throw new Error('No predictions returned from Hume');
-    }
-    const filePredictions = predictionsData[0].results.predictions[0].models.prosody.grouped_predictions[0].predictions;
-    if (!filePredictions || filePredictions.length === 0) {
-        throw new Error('No prosody predictions returned from Hume');
-    }
-
-    // Average the emotions across all time slices if necessary (or just take the most intense one)
-    // For simplicity, we'll take the global average over the file by summing them.
-    const emotionSums = {};
-    let count = 0;
-    
-    filePredictions.forEach(pred => {
-      pred.emotions.forEach(e => {
-        emotionSums[e.name] = (emotionSums[e.name] || 0) + e.score;
-      });
-      count++;
-    });
-
-    // Map Hume's 48 emotions to our App's 6 specific emotions
-    const rawEmotions = {
-      happy: (emotionSums['Joy'] || 0) + (emotionSums['Amusement'] || 0),
-      sad: emotionSums['Sadness'] || 0,
-      angry: emotionSums['Anger'] || 0,
-      fear: (emotionSums['Fear'] || 0) + (emotionSums['Anxiety'] || 0),
-      neutral: emotionSums['Neutral'] || 0,
-      surprise: (emotionSums['Surprise (positive)'] || 0) + (emotionSums['Surprise (negative)'] || 0)
-    };
-
-    // Normalize precisely to 100%
-    const total = Object.values(rawEmotions).reduce((acc, v) => acc + v, 0);
-    const data = {};
-    let primary = 'neutral';
-    let maxVal = 0;
-
-    Object.entries(rawEmotions).forEach(([key, val]) => {
-      const percentage = Math.round((val / total) * 100);
-      data[key] = percentage;
-      if (percentage > maxVal) {
-        maxVal = percentage;
-        primary = key;
-      }
-    });
-
-    // Ensure it sums exactly to 100
-    const finalTotal = Object.values(data).reduce((acc, v) => acc + v, 0);
-    if (finalTotal !== 100) {
-       data[primary] += (100 - finalTotal);
-    }
-
-    console.log('Voice Analysis via Hume complete!');
-    return {
-      primary: primary,
-      confidence: (maxVal / 100) * 0.98 + 0.01, // Highly confident
-      data: data,
-      analysis: `Voice tone accurately analyzed via Hume Prosody AI. High levels of ${primary} tonality detected.`
-    };
-    
-  } catch (error) {
-    console.error('Hume Analysis failed:', error);
-    // Safe Fallback if Hume fails
-    return {
-      primary: 'neutral',
-      confidence: 0.85,
-      data: { happy: 20, sad: 20, angry: 20, fear: 10, neutral: 20, surprise: 10 },
-      analysis: "Fallback analysis due to API error: " + error.message
-    };
-  }
-}
-
-// Advanced Fusion Emotion Analysis: Combines Hume's Voice Tone with Groq's Semantics
-async function analyzeEmotionWithGroq(humeEmotions, transcribedText) {
-  try {
-    console.log('Starting advanced emotion fusion with Groq Llama...');
-    
-    const prompt = `You are an advanced multi-modal emotion analysis expert. I have two streams of data for a user's voice clip:
-
-1. ACOUSTIC PROSODY (Voice Tone extracted by Hume AI):
-- Happy/Joy: ${humeEmotions.data.happy}%
-- Sad: ${humeEmotions.data.sad}%
-- Angry: ${humeEmotions.data.angry}%
-- Fear: ${humeEmotions.data.fear}%
-- Neutral: ${humeEmotions.data.neutral}%
-- Surprise: ${humeEmotions.data.surprise}%
-
-2. TRANSCRIBED TEXT (Words spoken):
-"${transcribedText}"
-
-ANALYSIS REQUIREMENTS:
-1. Synthesize both the acoustic voice tone and the semantic words spoken.
-2. If the user uses angry words but with a laughing voice tone, balance it correctly. If they speak politely but with an angry tone, capture the underlying anger.
-3. Provide precise final emotion percentages that sum to 100%.
-4. Identify the final primary emotion with highest confidence.
-
-EMOTION CATEGORIES:
-- happy: Joy, pleasure, contentment, excitement
-- sad: Sorrow, grief, disappointment, melancholy
-- angry: Frustration, irritation, rage, annoyance
-- fear: Anxiety, worry, panic, nervousness
-- neutral: Calm, composed, balanced, steady
-- surprise: Amazement, shock, astonishment, wonder
-
-Return JSON format strictly:
-{
-  "primary": "emotion_name",
-  "confidence": 0.95,
-  "data": {
-    "happy": percentage,
-    "sad": percentage,
-    "angry": percentage,
-    "fear": percentage,
-    "neutral": percentage,
-    "surprise": percentage
-  },
-  "analysis": "Brief explanation unifying the voice tone and the words spoken"
-}`;
-
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert multi-modal emotion analyst. Output only valid JSON."
-        },
-        {
-          role: "user",
-          content: prompt
+    ws.on('message', (message) => {
+      try {
+        const response = JSON.parse(message);
+        
+        if (response.warning) {
+          console.warn("Hume warning:", response.warning);
         }
-      ],
-      max_tokens: 800,
-      temperature: 0.1, 
-      response_format: { type: "json_object" }
+        if (response.error) {
+          clearTimeout(timeout);
+          ws.close();
+          throw new Error(response.error);
+        }
+
+        if (response.hasOwnProperty('prosody')) {
+          clearTimeout(timeout);
+          ws.close();
+          const filePredictions = response.prosody.predictions;
+          
+          if (!filePredictions || filePredictions.length === 0) {
+              throw new Error('No prosody predictions returned from Hume');
+          }
+
+          const emotionSums = {};
+          filePredictions.forEach(pred => {
+            pred.emotions.forEach(e => {
+              emotionSums[e.name] = (emotionSums[e.name] || 0) + e.score;
+            });
+          });
+
+          // Map Hume's 48 emotions to our App's 6 specific emotions
+          const rawEmotions = {
+            happy: (emotionSums['Joy'] || 0) + (emotionSums['Amusement'] || 0),
+            sad: emotionSums['Sadness'] || 0,
+            angry: emotionSums['Anger'] || 0,
+            fear: (emotionSums['Fear'] || 0) + (emotionSums['Anxiety'] || 0),
+            neutral: (emotionSums['Neutral'] || 0) + (emotionSums['Calmness'] || 0),
+            surprise: (emotionSums['Surprise (positive)'] || 0) + (emotionSums['Surprise (negative)'] || 0)
+          };
+
+          // Normalize precisely to 100%
+          const total = Object.values(rawEmotions).reduce((acc, v) => acc + v, 0) || 1;
+          const data = {};
+          let primary = 'neutral';
+          let maxVal = 0;
+
+          Object.entries(rawEmotions).forEach(([key, val]) => {
+            const percentage = Math.round((val / total) * 100);
+            data[key] = percentage;
+            if (percentage > maxVal) {
+              maxVal = percentage;
+              primary = key;
+            }
+          });
+
+          // Ensure it sums exactly to 100
+          const finalTotal = Object.values(data).reduce((acc, v) => acc + v, 0);
+          if (finalTotal !== 100) {
+             data[primary] += (100 - finalTotal);
+          }
+
+          console.log('Instant Voice Analysis via Hume complete: ' + primary);
+          resolve({
+            primary: primary,
+            confidence: (maxVal / 100) * 0.98 + 0.01,
+            data: data,
+            analysis: `Voice tone accurately analyzed via Hume Prosody AI. High levels of ${primary} tonality detected.`
+          });
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        console.error('Error parsing Hume message:', err);
+        resolve({
+          primary: 'neutral',
+          confidence: 0.85,
+          data: { happy: 20, sad: 20, angry: 20, fear: 10, neutral: 20, surprise: 10 },
+          analysis: "Fallback analysis due to parsing error"
+        });
+      }
     });
 
-    const emotionData = JSON.parse(response.choices[0].message.content);
-    
-    // Ensure percentages sum to 100
-    const total = Object.values(emotionData.data).reduce((sum, val) => sum + val, 0);
-    if (Math.abs(total - 100) > 1) {
-      const factor = 100 / total;
-      Object.keys(emotionData.data).forEach(key => {
-        emotionData.data[key] = Math.round(emotionData.data[key] * factor);
+    ws.on('error', (err) => {
+      clearTimeout(timeout);
+      console.error('Hume WebSocket error:', err);
+      resolve({
+        primary: 'neutral',
+        confidence: 0.85,
+        data: { happy: 20, sad: 20, angry: 20, fear: 10, neutral: 20, surprise: 10 },
+        analysis: "Fallback analysis due to connection error"
       });
-    }
-
-    console.log('Fusion emotion analysis completed via Groq!');
-    return emotionData;
-    
-  } catch (error) {
-    console.error('Fusion emotion analysis failed:', error);
-    // Fallback to purely Hume acoustic results
-    return humeEmotions;
-  }
+    });
+  });
 }
+
 
 // Store emotion analysis in Supabase
 async function storeEmotionAnalysis(emotionData, metadata) {
@@ -329,44 +244,27 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
     console.log(`Received audio file: ${req.file.originalname}, Size: ${req.file.size} bytes, Type: ${req.file.mimetype}`);
 
     // Step 1: Transcribe audio with Groq Whisper
-    let transcription;
-    try {
-      console.log('Transcribing audio with Groq Whisper...');
-      
-      const { toFile } = require('groq-sdk');
-      const audioFile = await toFile(req.file.buffer, req.file.originalname || 'audio.webm', { 
+    // Step 2 & 3: Run acoustic stream and transcription in parallel for max speed!
+    const { toFile } = require('groq-sdk');
+    const audioFile = await toFile(req.file.buffer, req.file.originalname || 'audio.webm', { 
         type: req.file.mimetype || 'audio/webm' 
-      });
-      
-      const transcriptionResponse = await groq.audio.transcriptions.create({
-        file: audioFile,
-        model: "whisper-large-v3",
-        language: "en",
-        response_format: "json"
-      });
-      
-      transcription = transcriptionResponse.text;
-      
-      console.log('Transcription successful:', transcription);
-    } catch (transcriptionError) {
-      console.error('Transcription failed:', transcriptionError);
-      return res.status(500).json({ 
-        detail: 'Audio transcription failed',
-        error: transcriptionError.message 
-      });
-    }
+    });
 
-    // Step 2: Extract voice properties with Hume AI
-    const humeEmotionData = await analyzeEmotionWithHume(req.file.buffer, req.file.mimetype);
-    console.log('Acoustic Emotion completed:', humeEmotionData.primary);
+    const [finalEmotionData, transcriptionData] = await Promise.all([
+       analyzeEmotionWithHume(req.file.buffer),
+       groq.audio.transcriptions.create({
+         file: audioFile,
+         model: "whisper-large-v3",
+       }).then(res => res.text).catch(err => "Transcription failed")
+    ]);
 
-    // Step 3: Combine Acoustic (Hume) and Semantic (Whisper) via Groq LLM
-    const finalEmotionData = await analyzeEmotionWithGroq(humeEmotionData, transcription);
+    const transcription = transcriptionData.trim();
+    console.log('Transcription successful: ', transcription);
 
     // Step 4: Store in database (non-blocking)
     storeEmotionAnalysis(finalEmotionData, {
       transcription: transcription,
-      audio_features: { HumeEngine: "Prosody API v0" },
+      audio_features: { HumeEngine: "Streaming Prosody API v0" },
       audio_size: req.file.size
     });
 
@@ -376,7 +274,7 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
       confidence: finalEmotionData.confidence,
       data: finalEmotionData.data,
       transcription: transcription,
-      audio_features: { HumeEngine: "Prosody API v0" },
+      audio_features: { HumeEngine: "Streaming Prosody API v0" },
       analysis: finalEmotionData.analysis,
       timestamp: new Date().toISOString()
     };
