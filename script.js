@@ -339,6 +339,30 @@ async function callEmotionAPI(audioBlob) {
     throw new Error('No audio detected. Please speak clearly during recording.');
   }
 
+  try {
+    const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+      ? 'http://localhost:3000' 
+      : 'https://voice-emotion-api-production.up.railway.app';
+      
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'audio.webm');
+    
+    const response = await fetch(`${backendURL}/api/predict`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Backend analysis received:', data);
+      return data;
+    } else {
+      console.warn('Backend API failed, falling back to client-side mode:', await response.text());
+    }
+  } catch (error) {
+    console.warn('Failed to reach backend, falling back to client-side mode:', error);
+  }
+
   // Client-side fallback analysis for immediate functionality
   console.log('Using client-side emotion analysis (fallback mode)');
   
@@ -710,6 +734,23 @@ async function loadHistory() {
   historyEmpty.classList.add('hidden');
   historyList.classList.add('hidden');
   
+  try {
+    const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+      ? 'http://localhost:3000' 
+      : 'https://voice-emotion-api-production.up.railway.app';
+      
+    const response = await fetch(`${backendURL}/api/history`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.data && data.data.length > 0) {
+        displayHistory(data.data);
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to fetch history from backend, falling back to local storage:', error);
+  }
+
   // Client-side fallback - no backend connection
   console.log('Using client-side history (fallback mode)');
   
@@ -800,6 +841,16 @@ backToMainBtn.addEventListener('click', () => {
 clearHistoryBtn.addEventListener('click', async () => {
   if (confirm('Are you sure you want to clear all history? This action cannot be undone.')) {
     try {
+      const backendURL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:3000' 
+        : 'https://voice-emotion-api-production.up.railway.app';
+      
+      try {
+        await fetch(`${backendURL}/api/history`, { method: 'DELETE' });
+      } catch (e) {
+        console.warn('Backend clear history failed:', e);
+      }
+      
       // Client-side fallback - clear localStorage
       localStorage.removeItem('emotionAnalysisHistory');
       showToast('History cleared successfully');
