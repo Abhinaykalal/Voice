@@ -186,6 +186,91 @@ async function analyzeEmotionWithHume(audioBuffer, mimeType) {
   }
 }
 
+// Advanced Fusion Emotion Analysis: Combines Hume's Voice Tone with Groq's Semantics
+async function analyzeEmotionWithGroq(humeEmotions, transcribedText) {
+  try {
+    console.log('Starting advanced emotion fusion with Groq Llama...');
+    
+    const prompt = `You are an advanced multi-modal emotion analysis expert. I have two streams of data for a user's voice clip:
+
+1. ACOUSTIC PROSODY (Voice Tone extracted by Hume AI):
+- Happy/Joy: ${humeEmotions.data.happy}%
+- Sad: ${humeEmotions.data.sad}%
+- Angry: ${humeEmotions.data.angry}%
+- Fear: ${humeEmotions.data.fear}%
+- Neutral: ${humeEmotions.data.neutral}%
+- Surprise: ${humeEmotions.data.surprise}%
+
+2. TRANSCRIBED TEXT (Words spoken):
+"${transcribedText}"
+
+ANALYSIS REQUIREMENTS:
+1. Synthesize both the acoustic voice tone and the semantic words spoken.
+2. If the user uses angry words but with a laughing voice tone, balance it correctly. If they speak politely but with an angry tone, capture the underlying anger.
+3. Provide precise final emotion percentages that sum to 100%.
+4. Identify the final primary emotion with highest confidence.
+
+EMOTION CATEGORIES:
+- happy: Joy, pleasure, contentment, excitement
+- sad: Sorrow, grief, disappointment, melancholy
+- angry: Frustration, irritation, rage, annoyance
+- fear: Anxiety, worry, panic, nervousness
+- neutral: Calm, composed, balanced, steady
+- surprise: Amazement, shock, astonishment, wonder
+
+Return JSON format strictly:
+{
+  "primary": "emotion_name",
+  "confidence": 0.95,
+  "data": {
+    "happy": percentage,
+    "sad": percentage,
+    "angry": percentage,
+    "fear": percentage,
+    "neutral": percentage,
+    "surprise": percentage
+  },
+  "analysis": "Brief explanation unifying the voice tone and the words spoken"
+}`;
+
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert multi-modal emotion analyst. Output only valid JSON."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 800,
+      temperature: 0.1, 
+      response_format: { type: "json_object" }
+    });
+
+    const emotionData = JSON.parse(response.choices[0].message.content);
+    
+    // Ensure percentages sum to 100
+    const total = Object.values(emotionData.data).reduce((sum, val) => sum + val, 0);
+    if (Math.abs(total - 100) > 1) {
+      const factor = 100 / total;
+      Object.keys(emotionData.data).forEach(key => {
+        emotionData.data[key] = Math.round(emotionData.data[key] * factor);
+      });
+    }
+
+    console.log('Fusion emotion analysis completed via Groq!');
+    return emotionData;
+    
+  } catch (error) {
+    console.error('Fusion emotion analysis failed:', error);
+    // Fallback to purely Hume acoustic results
+    return humeEmotions;
+  }
+}
+
 // Store emotion analysis in Supabase
 async function storeEmotionAnalysis(emotionData, metadata) {
   if (!supabase) {
@@ -271,15 +356,15 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
       });
     }
 
-    // Step 2: Skip broken internal feature extraction
-    // We now rely purely on Hume AI for the voice feature extraction!
+    // Step 2: Extract voice properties with Hume AI
+    const humeEmotionData = await analyzeEmotionWithHume(req.file.buffer, req.file.mimetype);
+    console.log('Acoustic Emotion completed:', humeEmotionData.primary);
 
-    // Step 3: Analyze voice properties with Hume AI
-    const emotionData = await analyzeEmotionWithHume(req.file.buffer, req.file.mimetype);
-    console.log('Emotion analysis completed:', emotionData.primary);
+    // Step 3: Combine Acoustic (Hume) and Semantic (Whisper) via Groq LLM
+    const finalEmotionData = await analyzeEmotionWithGroq(humeEmotionData, transcription);
 
     // Step 4: Store in database (non-blocking)
-    storeEmotionAnalysis(emotionData, {
+    storeEmotionAnalysis(finalEmotionData, {
       transcription: transcription,
       audio_features: { HumeEngine: "Prosody API v0" },
       audio_size: req.file.size
@@ -287,12 +372,12 @@ app.post('/api/predict', upload.single('audio'), async (req, res) => {
 
     // Step 5: Return results
     const result = {
-      primary: emotionData.primary,
-      confidence: emotionData.confidence,
-      data: emotionData.data,
+      primary: finalEmotionData.primary,
+      confidence: finalEmotionData.confidence,
+      data: finalEmotionData.data,
       transcription: transcription,
       audio_features: { HumeEngine: "Prosody API v0" },
-      analysis: emotionData.analysis,
+      analysis: finalEmotionData.analysis,
       timestamp: new Date().toISOString()
     };
 
